@@ -17,7 +17,10 @@ typedef struct {
 typedef struct {
     float lat;
     float lon;
-    char* name;
+    char name[100];
 } GraphicTownPoint;
+
+int lon_to_x(float lon, int window_width);
+int lat_to_y(float lat, int window_height);
 
 #endif
