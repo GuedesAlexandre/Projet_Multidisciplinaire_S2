@@ -1,7 +1,6 @@
 # Rapport de développement
 
-## Parseur CSV
-### Structure des données
+## Parseur CSV - Structure des données
 
 Pour représenter une commune, on a introduit la struct `Municipality` dans `municipality.h`.  
 Elle ne contient que les champs pertinent pour le projet projet afin de limiter l'utilisation de la mémoire et de simplifier la logique métier :
@@ -40,14 +39,3 @@ typedef struct {
 ```
 
 Une fonction  `municipality_table_free` gère la libération de la mémoire associée. Cela évite les fuites mémoire et rend l’API plus sûre à utiliser côté appelant, même en cas d’erreur d’allocation.
-
-### Gestion de la mémoire et tableau dynamique
-
-La table de communes est construite de manière dynamique au fur et à mesure de la lecture du fichier :
-
-- Au début du parsing, `items` est `NULL`, `count` et `capacity` sont initialisés à 0.
-- Avant d’ajouter une nouvelle commune, on vérifie si `count >= capacity`. Si oui, on appelle la fonction interne `table_grow`.
-- `table_grow` applique une stratégie d’agrandissement exponentielle : si la capacité est nulle, elle commence à `INITIAL_CAP` (512), sinon elle double la capacité actuelle. Cette approche limite le nombre d’appels à `realloc` et offre de meilleures performances qu’une croissance linéaire.
-- En cas d’échec de `realloc`, la fonction retourne une erreur mémoire, un message d’erreur est affiché, et on nettoie proprement la table via `municipality_table_free`.
-
-Ce design sépare les responsabilités : le parseur gère l’allocation et la croissance du tableau, tandis que le reste du programme consomme simplement une `MunicipalityTable` déjà remplie.
