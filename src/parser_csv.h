@@ -33,6 +33,6 @@ CsvParserError csv_parser_parse_file(const char *path, MunicipalityTable *out);
  * @param err The error code.
  * @return A string describing the error.
  */
-const char *csv_parser_strerror(CsvParserError err);
+const char *csv_error_mapper(CsvParserError err);
 
 #endif
