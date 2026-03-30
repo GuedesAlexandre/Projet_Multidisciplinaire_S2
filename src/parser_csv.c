@@ -28,7 +28,7 @@
 
 /**
  * @brief Splits a line into fields based on commas.
- * @param line The line to split.split_line
+ * @param line The line to split.
  * @param fields An array to store the field pointers.
  * @param max_fields The maximum number of fields to parse.
  * @return The number of fields found.
@@ -67,7 +67,7 @@ static void safe_copy(char *dst, const char *src, size_t dst_size)
  * @param fields An array of field pointers.
  * @param n The number of fields.
  * @param out The Municipality struct to populate.
- * @return The error code.
+ * @return CSV_PARSER_OK on success, CSV_PARSER_ERR_FORMAT on format error.
  */
 static CsvParserError parse_row(char *fields[], size_t n, Municipality *out)
 {
@@ -87,6 +87,8 @@ static CsvParserError parse_row(char *fields[], size_t n, Municipality *out)
  * @brief Grows the capacity of a MunicipalityTable.
  * @param t The table to grow.
  * @return 0 on success, -1 on failure.
+ * @note The function doubles the capacity when growing, starting from INITIAL_CAP if the current capacity is 0, otherwise it multiplies the current capacity by 2.
+ * If memory allocation fails, the function returns -1 and the table remains unchanged.
  */
 static int table_grow(MunicipalityTable *t)
 {
@@ -104,6 +106,7 @@ static int table_grow(MunicipalityTable *t)
  * @param path The path to the CSV file.
  * @param out The table of municipalities to populate.
  * @return The error code.
+ * @note Lines with invalid format are skipped, but the function continues parsing the rest of the file.
  * The caller is responsible for calling municipality_table_free() on success.
  */
 CsvParserError csv_parser_parse_file(const char *path, MunicipalityTable *out)
@@ -135,7 +138,7 @@ CsvParserError csv_parser_parse_file(const char *path, MunicipalityTable *out)
             {
                 fprintf(stderr, "line %d: memory allocation failed\n", lineno);
                 err = CSV_PARSER_ERR_MEMORY;
-                goto cleanup;
+                break;
             }
         }
         int fields_count = split_line(line, fields, NUM_FIELDS);
@@ -150,17 +153,16 @@ CsvParserError csv_parser_parse_file(const char *path, MunicipalityTable *out)
         }
         out->items[out->count++] = row;
     }
-    if (ferror(fp))
+   if (err == CSV_PARSER_OK && ferror(fp))
         err = CSV_PARSER_ERR_IO;
 
-cleanup:
     fclose(fp);
     if (err != CSV_PARSER_OK)
         municipality_table_free(out);
     return err;
 }
 
-const char *csv_parser_strerror(CsvParserError err)
+const char *csv_error_mapper(CsvParserError err)
 {
     switch (err)
     {
