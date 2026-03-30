@@ -42,4 +42,4 @@ La fonction `csv_parser_parse_file` renvoie un `CsvParserError` qui permet à l�
 - Erreur d’allocation mémoire.
 - Format invalide pour une ligne (gérée de façon non bloquante en loggant la ligne et en continuant).
 
-On peut utiliser `csv_parser_strerror` pour afficher un message d’erreur utilisateur. En cas d’erreur globale, la fonction garantit que la table passée en sortie est remise en état (mémoire libérée, compteurs à 0), ce qui simplifie la gestion des ressources dans le reste du projet.
+La fonction `csv_error_mapper` est une fonction qui est utilisée seulement pour le debogage.
