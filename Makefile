@@ -7,7 +7,9 @@ TARGET = build/graphic
 
 SRC = \
 	src/graphics/graphic.c \
-	src/graphics/map/map.c
+	src/graphics/map/map.c \
+	src/parser_csv.c \
+	src/municipality.c
 
 OBJ = $(patsubst src/%.c,build/%.o,$(SRC))
 
