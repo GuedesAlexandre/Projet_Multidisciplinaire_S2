@@ -85,9 +85,9 @@ int main(int argc, char *argv[]) {
     printf("%lu communes chargées.\n", (unsigned long)table.count);
 
     init_window(WINDOW_WIDTH, WINDOW_HEIGHT);
-    draw_map_of_towns(table.items, (int)table.count);
+    draw_map_of_towns(table.items, table.count);
     actualise();
-    run_fake_generations(table.items, (int)table.count, 20, 5000);
+    run_fake_generations(table.items, table.count, 20, 5000);
 
     MLV_wait_mouse(NULL, NULL);
     close_window();
