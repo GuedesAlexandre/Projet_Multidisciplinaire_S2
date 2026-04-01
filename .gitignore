@@ -1,0 +1,11 @@
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# .o file
+*.o
+
