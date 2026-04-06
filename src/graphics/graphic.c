@@ -11,8 +11,10 @@
 #include "parser_csv.h"
 
 #define LAT_CENTER 46.5f
-#define WINDOW_WIDTH 800
+#define WINDOW_WIDTH 1200
 #define WINDOW_HEIGHT 800
+#define MAP_WIDTH 800
+#define MAP_HEIGHT 800
 
 #define CSV_PATH "assets/communes-france-metrople-2025.csv"
 
@@ -23,11 +25,11 @@ void init_window(int width, int height) {
 
 
 void draw_map_of_towns(Municipality* towns, int num_towns, MLV_Image* background) {
-    MLV_draw_filled_rectangle(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, MLV_COLOR_BLACK);
+    MLV_draw_filled_rectangle(0, 0, MAP_WIDTH, MAP_HEIGHT, MLV_COLOR_BLACK);
     int i;
         for ( i = 0; i < num_towns; i++) {
-            int x = lon_to_x(towns[i].longitude, WINDOW_WIDTH);
-            int y = lat_to_y(towns[i].latitude, WINDOW_HEIGHT);
+            int x = lon_to_x(towns[i].longitude, MAP_WIDTH);
+            int y = lat_to_y(towns[i].latitude, MAP_HEIGHT);
             MLV_draw_point_on_image(x, y, MLV_COLOR_BLUE, background);
         }
 
@@ -41,23 +43,23 @@ void draw_hospitals(Municipality* towns, int num_towns, int num_hospitals) {
         if(towns[index].population > 80000) {
             draw_chru(towns, index);
         } else {
-            int x = lon_to_x(towns[index].longitude, WINDOW_WIDTH);
-            int y = lat_to_y(towns[index].latitude, WINDOW_HEIGHT);
+            int x = lon_to_x(towns[index].longitude, MAP_WIDTH);
+            int y = lat_to_y(towns[index].latitude, MAP_HEIGHT);
             MLV_draw_point(x, y, MLV_COLOR_RED);
         }
     }
 }
 
 void draw_chru(Municipality* towns, int index) {
-    int x = lon_to_x(towns[index].longitude, WINDOW_WIDTH);
-    int y = lat_to_y(towns[index].latitude, WINDOW_HEIGHT);
+    int x = lon_to_x(towns[index].longitude, MAP_WIDTH);
+    int y = lat_to_y(towns[index].latitude, MAP_HEIGHT);
     MLV_draw_filled_circle(x, y, 3, MLV_COLOR_GREEN);
 }
 
 
 void run_fake_generations(Municipality* towns, int num_towns, int num_generations, int hospitals_per_gen, MLV_Image* background) {
     int gen;
-    char label[64];
+    char label[128];
     srand(time(NULL));
     for(gen = 0; gen < num_generations; gen++){
         MLV_clear_window(MLV_COLOR_BLACK);
@@ -66,6 +68,8 @@ void run_fake_generations(Municipality* towns, int num_towns, int num_generation
         
         sprintf(label, "Génération %d / %d", gen + 1, num_generations);
         MLV_draw_text(10, 10, label, MLV_COLOR_WHITE);
+        sprintf(label, "Test de placement du texte des données de chaque génération : %d", gen + 1);
+        MLV_draw_text(700, 10, label, MLV_COLOR_WHITE);
         actualise();
         MLV_wait_milliseconds(500);
     }
@@ -96,7 +100,7 @@ int main(int argc, char *argv[]) {
     
     printf("%lu communes chargées.\n", (unsigned long)table.count);
     
-    MLV_Image* bg = MLV_create_image(WINDOW_WIDTH, WINDOW_HEIGHT);
+    MLV_Image* bg = MLV_create_image(MAP_WIDTH, MAP_HEIGHT);
 
     init_window(WINDOW_WIDTH, WINDOW_HEIGHT);
     draw_map_of_towns(table.items, table.count, bg);
