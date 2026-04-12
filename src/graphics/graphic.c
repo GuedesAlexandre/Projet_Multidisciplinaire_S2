@@ -35,27 +35,6 @@ void draw_map_of_towns(Municipality* towns, int num_towns, MLV_Image* background
 
 }
 
-void draw_hospitals(Municipality* towns, int num_towns, int num_hospitals) {
-    int i;
-    int index;
-    for( i = 0; i < num_hospitals; i++) {
-        index = rand() % num_towns;
-        if(towns[index].population > 80000) {
-            draw_chru(towns, index);
-        } else {
-            int x = lon_to_x(towns[index].longitude, MAP_WIDTH);
-            int y = lat_to_y(towns[index].latitude, MAP_HEIGHT);
-            MLV_draw_point(x, y, MLV_COLOR_RED);
-        }
-    }
-}
-
-void draw_chru(Municipality* towns, int index) {
-    int x = lon_to_x(towns[index].longitude, MAP_WIDTH);
-    int y = lat_to_y(towns[index].latitude, MAP_HEIGHT);
-    MLV_draw_filled_circle(x, y, 3, MLV_COLOR_GREEN);
-}
-
 
 void close_window() {
     MLV_free_window();
