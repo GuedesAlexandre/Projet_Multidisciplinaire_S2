@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -Wall -ansi
+CFLAGS := -Wall -ansi -O3
 LDFLAGS := -lm
 
 TARGET := app
