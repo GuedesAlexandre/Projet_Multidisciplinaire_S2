@@ -1,3 +1,10 @@
 # Compiled binaries
 *.o
 build/*
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
