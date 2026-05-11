@@ -16,10 +16,10 @@ static int already_in(const int *arr, int len, int v)
 
 /**
  * For each of the parent_count slots, k individuals are drawn at random
- * from the generation and the one with the highest fitness wins the 
- * tournament and is added to out_parent_indices. 
+ * from the generation and the one with the highest fitness wins the
+ * tournament and is added to out_parent_indices.
  * Duplicates in the output are possible and expected: a strong individual
- * will naturally win multiple tournaments. 
+ * will naturally win multiple tournaments.
  */
 int selection_tournament(const Generation *gen,
                          int *out_parent_indices,

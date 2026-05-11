@@ -27,7 +27,7 @@ static int contains(const int *arr, int len, int v)
  *
  * Step 1 — Coin flip: for position i, pick parent1->indices[i] or
  *           parent2->indices[i] with equal probability.
- * Step 2 — No duplicate: keep the candidate as-is.
+ * Step 2 — No duplicate: keep it.
  * Step 3 — Duplicate found: scan parent2 in order for the first unused gene.
  * Step 4 — Still duplicate: scan parent1 in order for the first unused gene.
  * Step 5 — A valid candidate is always found because both parents contain
