@@ -2,6 +2,7 @@
 #include <math.h>
 
 #define PI 3.14159265358979323846
+#define LAT_DIFF_LIMIT_DEG (HOSPITAL_RADIUS_KM / 111.0)
 
 static double deg_to_rad(double degree_value) {
     return degree_value * (PI / 180.0);
@@ -28,36 +29,41 @@ double compute_fitness(const MunicipalityTable* table,
                        int* out_nb_chru) {
     size_t i;
     int j;
+    const Municipality* items = table->items;
     long habitants_desert = 0;
     int nb_chru = 0;
 
     for (j = 0; j < hospital_count; j++) {
         int hi = hospital_indices[j];
         if (hi >= 0 && (size_t)hi < table->count &&
-            table->items[hi].population >= CHRU_POP_THRESHOLD) {
+            items[hi].population >= CHRU_POP_THRESHOLD) {
             nb_chru++;
         }
     }
 
     for (i = 0; i < table->count; i++) {
         int covered = 0;
-        double lat = table->items[i].latitude;
-        double lon = table->items[i].longitude;
+        double lat = items[i].latitude;
+        double lon = items[i].longitude;
 
         for (j = 0; j < hospital_count; j++) {
             int hi = hospital_indices[j];
+            double hlat;
             if (hi < 0 || (size_t)hi >= table->count) continue;
 
+            hlat = items[hi].latitude;
+            if (fabs(lat - hlat) > LAT_DIFF_LIMIT_DEG) continue;
+
             if (haversine_km(lat, lon,
-                             table->items[hi].latitude,
-                             table->items[hi].longitude) < HOSPITAL_RADIUS_KM) {
+                             hlat,
+                             items[hi].longitude) < HOSPITAL_RADIUS_KM) {
                 covered = 1;
                 break;
             }
         }
 
         if (!covered) {
-            habitants_desert += table->items[i].population;
+            habitants_desert += items[i].population;
         }
     }
 
