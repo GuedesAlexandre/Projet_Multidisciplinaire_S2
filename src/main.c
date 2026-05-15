@@ -80,7 +80,7 @@ int main()
 
     /* Chargement des communes */
     csv_parser_parse_file("./assets/communes-france-metrople-2025.csv", &table);
-    printf("Communes chargees : %ld\n", table.count);
+    printf("Communes chargees : %d\n", table.count);
 
     /* 1. Generation initiale */
     generation_init_random(&gen, POP_SIZE, NB_HOP, table.count);
