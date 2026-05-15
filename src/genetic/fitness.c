@@ -20,6 +20,8 @@ double haversine_km(double lat1, double lon1, double lat2, double lon2) {
     return R * c;
 }
 
+
+
 double compute_fitness(const MunicipalityTable* table,
                        const int* hospital_indices,
                        int hospital_count,
