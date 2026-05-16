@@ -6,7 +6,7 @@
 *~
 .DS_Store
 
-# .o file
-*.o
-
 app
+# Compiled binaries
+*.o
+build/*
