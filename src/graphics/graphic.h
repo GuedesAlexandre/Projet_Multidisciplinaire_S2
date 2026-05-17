@@ -48,6 +48,29 @@ void draw_chru(Municipality* towns, int index);
 void draw_hospitals_from_individu(Municipality* towns, int num_towns, Individu* ind);
 
 /**
+ * @brief Get the index of the best generation.
+ * @param gen The generation containing the evaluated individuals.
+ */
+int generation_get_best_index(const Generation* gen);
+
+/**
+ * @brief Displays the title and statistics of an individual at the top-left of the screen.
+ * @param ind The individual whose statistics are to be displayed.
+ * @param habitants_desert The number of inhabitants in medical deserts for this individual.
+ * @param title The title text to display on the first line.
+ * @param title_color The color used to draw the title.
+ */
+void draw_individu_info(Individu* ind, long habitants_desert, const char* title, MLV_Color title_color);
+
+/**
+ * @brief Displays an animation of the genetic algorithm's results.
+ * @param table The municipality table.
+ * @param gen The generation containing the evaluated individuals.
+ * @param inhabitants_desert Array containing the number of inhabitants in medical deserts per individual.
+ */
+void display_genetic_results(MunicipalityTable* table, Generation* gen, long* inhabitants_desert);
+
+/**
  * @brief Closes the graphical window and releases associated resources.
  */
 void close_window();
