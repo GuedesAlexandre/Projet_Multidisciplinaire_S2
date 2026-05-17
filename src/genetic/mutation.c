@@ -10,8 +10,8 @@ static int contains_int(const int* arr, int len, int v) {
 }
 
 /*
- * Remplace un hopital tire aleatoirement par une autre commune,
- * en garantissant l'absence de doublon.
+ * Replace a randomly picked hospital with another commune,
+ * ensuring no duplicates.
  */
 static void mutation_deplacement(Individu* ind, int commune_count) {
     int pos; 
@@ -26,8 +26,8 @@ static void mutation_deplacement(Individu* ind, int commune_count) {
 }
 
 /*
- * Ajoute une commune dans indices[].
- * Retourne 0 en cas de succes, 1 si le realloc fail.
+ * Add a commune to indices[].
+ * Returns 0 on success, 1 if realloc fails.
  */
 static int mutation_ajout(Individu* ind, int commune_count) {
     int cand;
@@ -47,8 +47,8 @@ static int mutation_ajout(Individu* ind, int commune_count) {
 }
 
 /*
- * Retire un hopital aleatoire en faisant un swap remove (O(1)).
- * Ne fait rien si nb_hop <= 1.
+ * Remove a random hospital using a swap remove (O(1)).
+ * Does nothing if nb_hop <= 1.
  */
 static void mutation_suppression(Individu* ind) {
     int pos;
