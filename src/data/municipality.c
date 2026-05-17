@@ -1,6 +1,4 @@
 #include "municipality.h"
-
-#include <stdio.h>
 #include <stdlib.h>
 
 void municipality_table_free(MunicipalityTable *table)
