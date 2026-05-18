@@ -5,6 +5,7 @@
 #include "./data/municipality.h"
 #include "./parsers/parser_csv.h"
 #include "./genetic/fitness.h"
+#include "./genetic/mutation.h"
 #include "./genetic/crossover.h"
 #include "./genetic/selection.h"
 
@@ -17,8 +18,10 @@ static void compute_fitness_gen(const MunicipalityTable *table, Generation *gen)
     long habitants_desert;
     int nb_chru;
     for (i = 0; i < gen->size; i++) {
+        /* nb_hop peut differer de NB_HOP apres mutation (ajout/suppression) */
         gen->items[i].fitness = compute_fitness(table, gen->items[i].indices,
-                                                NB_HOP, &habitants_desert, &nb_chru);
+                                                gen->items[i].nb_hop,
+                                                &habitants_desert, &nb_chru);
         gen->items[i].nb_chru = nb_chru;
     }
 }
@@ -107,21 +110,31 @@ int main()
         return 1;
     }
 
-    /* 5. Calcul fitness des enfants */
-    compute_fitness_gen(&table, &children);
-    print_gen(&children, "Generation apres crossover");
+    /* 5. Mutation sur les enfants (avant fitness, avant injection des elites
+     *    pour ne pas alterer les elites copies). */
+    if (mutation_generation(&children, table.count) != 0) {
+        printf("Erreur mutation\n");
+        generation_free(&gen);
+        generation_free(&children);
+        municipality_table_free(&table);
+        return 1;
+    }
 
-    /* 6. Injection des elites */
+    /* 6. Calcul fitness des enfants (apres mutation) */
+    compute_fitness_gen(&table, &children);
+    print_gen(&children, "Generation apres crossover + mutation");
+
+    /* 7. Injection des elites (les elites ne sont jamais mutees) */
     inject_elites(&children, &gen, elites);
     printf("\n=== Apres injection des elites ===\n");
     printf("Meilleure = %.0f | Moyenne = %.0f\n",
            get_best(&children), get_avg(&children));
 
-    /* 7. Comparaison finale */
+    /* 8. Comparaison finale */
     printf("\n=== Comparaison ===\n");
-    printf("Generation initiale : meilleure = %.0f | moyenne = %.0f\n",
+    printf("Generation initiale         : meilleure = %.0f | moyenne = %.0f\n",
            get_best(&gen), get_avg(&gen));
-    printf("Apres crossover     : meilleure = %.0f | moyenne = %.0f\n",
+    printf("Apres crossover + mutation  : meilleure = %.0f | moyenne = %.0f\n",
            get_best(&children), get_avg(&children));
 
     /* Liberation memoire */
