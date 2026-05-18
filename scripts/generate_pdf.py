@@ -14,7 +14,7 @@ COMMUNES_COLS = [
 
 # Ne pas laisser panda deviner les types pour éviter les erreurs
 COMMUNES_DTYPE = {"insee_code": int, "dept_code": int, "population": int}
-SOLUTION_DTYPE = {"insee_code": int, "a_hopital": int, "est_chru": int, "est_couverte": int}
+SOLUTION_DTYPE = {"insee_code": int, "a_hopital": int, "est_chru": int}
 
 # Retourne un tableau pandas de toutes les datas
 def load_data():
@@ -30,6 +30,7 @@ def load_data():
 
 # Comme une jointure SQL (how="left" garde toutes les lignes de solution)
     df = solution.merge(communes, on="insee_code", how="left")
+    df["est_couverte"] = df["hopital_desservant"].notna().astype(int)
     return df
 
 # Retourne un tableau pandas (insee_code, nb_lits) pour chaque hôpital.
