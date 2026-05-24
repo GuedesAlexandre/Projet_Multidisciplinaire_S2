@@ -1,14 +1,7 @@
-#include <stdio.h>
-#include <math.h>
-#include <stdlib.h>
-#include <time.h>
 #include <MLV/MLV_all.h>
-
 #include "graphic.h"
-#include "map.h"
 
-#include "municipality.h"
-#include "parser_csv.h"
+#include "../data/municipality.h"
 
 #define LAT_CENTER 46.5f
 #define WINDOW_WIDTH 1200
@@ -42,7 +35,7 @@ void close_window() {
 
 
 void actualise(){
-    /* 
+    /*
     TODO: Ajouter méthode pour réinitialiser la struct avec données de nouvelle génération.
     */
     MLV_actualise_window();
