@@ -15,8 +15,11 @@ SRC := \
 	$(SRCDIR)/genetic/selection.c \
 	$(SRCDIR)/genetic/mutation.c \
 	$(SRCDIR)/genetic/crossover.c \
+	$(SRCDIR)/genetic/ga.c \
+	$(SRCDIR)/genetic/coverage.c \
 	$(SRCDIR)/graphics/graphic.c \
-	$(SRCDIR)/graphics/map/map.c
+	$(SRCDIR)/graphics/map/map.c \
+	$(SRCDIR)/tools/tools.c
 
 OBJ := $(SRC:.c=.o)
 

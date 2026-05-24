@@ -1,9 +1,4 @@
-#include <stdio.h>
-#include <math.h>
-#include <stdlib.h>
-#include <time.h>
 #include <MLV/MLV_all.h>
-
 #include "graphic.h"
 #include "map/map.h"
 
@@ -130,7 +125,7 @@ void close_window() {
 
 
 void actualise(){
-    /* 
+    /*
     TODO: Ajouter méthode pour réinitialiser la struct avec données de nouvelle génération.
     */
     MLV_actualise_window();

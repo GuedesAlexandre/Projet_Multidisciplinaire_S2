@@ -14,11 +14,15 @@
 
 #include "generation.h"
 
-/** @brief Number of individuals competing in each tournament. */
-#define TOURNAMENT_K 3
 
-/** @brief Number of elite individuals preserved each generation. */
-#define ELITE_COUNT  2
+
+/**
+ * @brief Selects one parent index using tournament selection.
+ * @param gen The current generation to select from.
+ * @param k   Tournament size. Clamped to gen->size if larger.
+ * @return The selected index, or -1 on error.
+ */
+int selection_tournament_pick(const Generation *gen, int k);
 
 /**
  * @brief Selects parents for crossover using tournament selection.
@@ -33,6 +37,26 @@ int selection_tournament(const Generation *gen,
                          int *out_parent_indices,
                          int parent_count,
                          int k);
+
+/**
+ * @brief Prepares a rank-based selection CDF.
+ * @return 0 on success, 1 on error.
+ */
+int selection_rank_build(const Generation *gen,
+                         int **out_indices,
+                         double **out_cdf,
+                         int *out_count);
+
+/**
+ * @brief Picks one index using the rank CDF.
+ * @return The selected index, or -1 on error.
+ */
+int selection_rank_pick(const int *indices, const double *cdf, int count);
+
+/**
+ * @brief Frees rank selection buffers.
+ */
+void selection_rank_free(int *indices, double *cdf);
 
 /**
  * @brief Identifies the elite_count best individuals in the generation.

@@ -40,17 +40,18 @@ int crossover(const Individu *parent1, const Individu *parent2,
  * @brief Produces a new generation by crossover with tournament selection.
  *
  * Calls selection_tournament() internally to pick 2 * gen->size parents,
- * then pairs them and applies crossover() to produce 2 * gen->size children.
- * Each pair (p1, p2) produces two children by swapping the parent order,
- * which increases diversity at no extra selection cost.
+ * then pairs them and applies crossover() to produce gen->size children.
  * If p1 == p2 after selection, a different p2 is drawn at random.
  *
  * @param gen The current generation used as the parent pool.
  * @param nb_hop Number of hospitals per individual.
- * @return A newly allocated Generation containing 2 * gen->size children.
+ * @param tournament_k Tournament size for parent selection.
+ * @return A newly allocated Generation containing gen->size children.
  *         On failure, the returned Generation has size == 0 and items == NULL.
  *         The caller is responsible for freeing it via generation_free().
  */
-Generation crossover_generation_new(const Generation *gen, int nb_hop);
+Generation crossover_generation_new(const Generation *gen,
+                                    int nb_hop,
+                                    int tournament_k);
 
 #endif /* CROSSOVER_H */
