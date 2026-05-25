@@ -1,119 +1,142 @@
-# Définition de notre algorithme
+# Definition de notre algorithme genetique
 
-## Comment ça marche théoriquement ?
+## Vue d'ensemble (implementation actuelle)
 
-Un algorithme génétique repose sur deux notions fondamentales : la population et l'individu. Un individu est une représentation encodée d'une solution candidate au problème. Une population est un ensemble d'individus évoluant ensemble au fil des générations.
+Notre algorithme genetique manipule une population d'individus. Chaque individu encode un ensemble fixe de communes choisies comme hopitaux (nombre fixe `nb_hop`). La population evolue avec elitisme, selection par tournoi, crossover uniforme, mutation, et injection d'immigrants. Un mecanisme de restart se declenche en cas de stagnation.
 
-L'algorithme se déroule de la façon suivante :
-Initialisation. On génère une population initiale d'individus de façon aléatoire. Chaque individu représente une implantation possible d'hôpitaux sur le territoire.
+La fitness a maximiser est :
 
-Évaluation. On calcule la fitness de chaque individu. Dans notre projet, la fonction de fitness à maximiser est :
+$$
+fitness = 65141355 - habitants\_desert - 5000 \times nb\_hop + 4000 \times nb\_chru
+$$
 
-fi𝑡𝑛𝑒𝑠𝑠(𝑖𝑚𝑝𝑙𝑎𝑛𝑡𝑎𝑡𝑖𝑜𝑛) = 65141355 − ℎ𝑎𝑏𝑖𝑡𝑎𝑛𝑡_𝑑𝑒𝑠𝑒𝑟𝑡 − 5000 × 𝑛𝑏_ℎ𝑜𝑝 + 4000 × 𝑛𝑏_𝑐ℎ𝑟𝑢
+Ou :
+- `habitants_desert` = population non couverte par un hopital a moins de 10 km.
+- `nb_chru` = nombre d'hopitaux places dans une commune avec population >= 80 000.
 
-Plus la fitness est élevée, meilleure est la solution : peu d'habitants en désert médical, peu d'hôpitaux (pour limiter les coûts) et un maximum de C.H.R.U.
+## Donnees et representation
 
-Sélection. On sélectionne les individus les plus performants — typiquement la moitié supérieure de la population — pour servir de parents à la génération suivante.
+### Structure des communes
+Le CSV est parse dans une table dynamique `MunicipalityTable` contenant des `Municipality` (code INSEE, nom, departement, population, latitude, longitude). Le tableau est charge une seule fois au demarrage et ne change plus.
 
-Croisement (crossover). On combine des paires de parents pour produire de nouveaux individus enfants. L'idée est que deux bonnes implantations partielles peuvent, une fois combinées, donner une implantation globalement meilleure.
-
-Mutation. On applique des modifications aléatoires sur certains individus avec une faible probabilité : ajout, suppression ou déplacement d'un hôpital. Ce mécanisme permet d'explorer de nouvelles zones de l'espace des solutions et d'éviter que la population converge trop tôt vers un optimum local.
-
-Nouvelle génération. Les individus enfants remplacent leurs parents et forment la nouvelle population. On itère ce processus jusqu'à satisfaire un critère d'arrêt : nombre maximal de générations atteint, ou fitness suffisamment élevée pour considérer la solution satisfaisante.
-
-## Comment ça s'implémente chez nous ?
-
-## Définition d'un individu
-
-Dans notre projet, une solution candidate est une sélection de communes parmi les ~34 900 communes de France métropolitaine hors Corse dans lesquelles on implante un hôpital. Le nombre d'hôpitaux n'est pas fixé a priori : c'est la fonction de fitness qui régule naturellement ce nombre via la pénalité -5000 × nb_hop.
-
-### La structure correspondant à notre csv est la suivante : 
-
-```c
-#define MAX_COMMUNES 35000
-
-typedef struct {
-    int    code_insee;
-    char   nom[100];
-    int    code_region;
-    char   nom_region[60];
-    int    code_dept;
-    char   nom_dept[60];
-    int    altitude;
-    int    population;
-    double latitude;
-    double longitude;
-} Commune;
-
-Commune communes[MAX_COMMUNES];
-int nb_communes;
-
-```
-
-Un individu représente une sélection de communes parmi les 34 438 où l'on place un hôpital. Concrètement, un individu est un tableau d'indices pointant vers des entrées du tableau global communes[].
+### Individu
+Un individu stocke uniquement des indices vers la table des communes, plus ses metadonnees :
 
 ```c
 typedef struct {
-    int    *indices;
-    int    nb_hop;   
+    int   *indices;  /* indices de communes choisies */
+    int    nb_hop;   /* nombre fixe d'hopitaux */
     double fitness;
+    int    nb_chru;
 } Individu;
 ```
 
-Le tableau global communes[] est chargé une seule fois au démarrage depuis le CSV. Il contient les 34 438 communes avec toutes leurs données (code INSEE, nom, population, lat/lon...). Ce tableau ne change jamais pendant l'exécution.
+Le nombre d'hopitaux par individu est fixe (parametre `nb_hop` du GA). La penalite sur `nb_hop` reste dans la fitness, mais `nb_hop` ne varie pas au cours de l'evolution.
 
-Un individu ne stocke pas les communes elles-mêmes — il stocke uniquement des indices dans ce tableau. C'est léger, rapide, et facile à manipuler
+## Acceleration du calcul de couverture
 
-### Calcul de la fitness
+Pour eviter de recalculer toutes les distances a chaque evaluation, on precalcule un index de couverture :
 
-Pour calculer la fitness, on doit savoir combien d'habitants sont en désert médical, c'est-à-dire dans aucune commune à moins de 10 km d'un hôpital. Pour ça, pour chaque commune sans hôpital, ont doit vérifier si elle est à moins de 10 km d'au moins un hôpital de l'individu.
+- `CoverageIndex.offsets[i]` et `offsets[i+1]` donnent le segment dans `indices[]` des communes couvertes par un hopital place a la commune `i`.
+- `CoverageIndex.indices` contient toutes les listes concatenees.
 
-Donc on devra coder une fonction distance qui utiliser la formule d'haversine.
+L'evaluation d'un individu marque les communes couvertes a partir de ces listes, puis additionne la population non marquee.
 
-### Le parcours du coup c'est quoi ? 
+## Initialisation
+
+La population initiale est generee par tirage pondéré : les communes les plus peuplees ont plus de chance d'etre choisies comme hopitaux. On garantit l'absence de doublons dans les indices.
+
+Parametres par defaut (config):
+- `population_size = 800`
+- `nb_hop = 1120`
+- `max_generations = 1000`
+- `elite_count = 2`
+- `tournament_k = 3`
+- `mutation_rate_start = 0.20`, `mutation_rate_end = 0.05`
+- `immigrants_rate = 0.10`, `immigrants_rate_max = 0.40`
+- `restart_threshold = 30`, `max_restarts = 5`
+- `target_fitness = 50 000 000`, `stagnation_limit = 120`
+
+## Selection
+
+La selection se fait par tournoi (k = 3). Une part de selection aleatoire est possible (`selection_random_rate`) pour garder de la diversite. L'elitisme copie les `elite_count` meilleurs individus directement dans la generation suivante.
+
+## Croisement (uniforme hybride)
+
+Pour chaque gene, on choisit aleatoirement le gene du parent 1 ou 2. En cas de doublon, on cherche deterministiquement le premier gene non utilise (d'abord dans parent 2, puis parent 1). Cela garantit un enfant sans doublons.
+
+## Mutation
+
+La mutation applique au hasard :
+- remplacement d'un hopital par une autre commune non presente, ou
+- permutation de deux positions (swap).
+
+Le taux de mutation evolue lineairement de `mutation_rate_start` vers `mutation_rate_end`, avec un boost en cas de stagnation (jusqu'a un plafond fixe a 0.35).
+
+## Immigrants
+
+Apres mutation, une partie des individus est remplacee par des individus aleatoires (immigrants). Le taux augmente quand la stagnation persiste, dans la limite de `immigrants_rate_max`.
+
+## Restarts et criteres d'arret
+
+Si la stagnation depasse `restart_threshold`, on reinitialise une population (tirage pondere) en conservant les elites. L'algorithme s'arrete quand :
+- la fitness cible est atteinte,
+- le nombre max de generations est atteint,
+- ou la stagnation atteint `stagnation_limit`.
+
+## Parcours d'execution
+
 ```
-1. Charger le CSV
-   └── parser chaque ligne → remplir communes[34438]
+1) Charger le CSV -> table des communes
+2) Construire l'index de couverture (CoverageIndex)
+3) Initialiser la population (tirage pondere)
+4) Evaluer la population
+5) Boucle de generations :
+   - ajuster mutation/immigrants selon la stagnation
+   - elitisme
+   - selection par tournoi + crossover uniforme
+   - mutation
+   - immigrants
+   - evaluation
+   - test arret / restart
+6) Afficher la meilleure fitness finale
 
-2. Initialiser la population
-   └── pour chaque individu :
-         tirer aléatoirement K indices dans [0, 34437]
-         → remplir individu.indices[], individu.nb_hop = K
-
-3. Boucle principale (jusqu'au critère d'arrêt)
-   │
-   ├── Évaluation
-   │     └── pour chaque individu :
-   │           pour chaque commune C :
-   │             pour chaque hôpital H :
-   │               si distance(C, H) < 10 → couverte
-   │           → calculer habitant_desert, nb_chru
-   │           → calculer fitness
-   │
-   ├── Sélection
-   │     └── trier la population par fitness décroissante
-   │         garder la moitié supérieure
-   │
-   ├── Croisement
-   │     └── combiner des paires de parents
-   │         → produire des enfants
-   │
-   ├── Mutation
-   │     └── modifier aléatoirement quelques individus
-   │         (ajout / suppression / déplacement d'hôpital)
-   │
-   └── Nouvelle génération
-         └── les enfants remplacent les parents
-
-4. Afficher la meilleure solution
-
-Annexe : Définir un hopital (une commune = un hopital)
-
-communes[] contient 34 438 communes
-                        ↓
-          on en tire K au hasard (ex: K=3000)
-                        ↓
-     ces K communes deviennent les hôpitaux
-     de cet individu → stockés dans indices[]
-     
 ```
+## La GACONFIG KESAKO ?
+
+`GAConfig` est la structure de configuration centrale de l'algorithme genetique. Elle regroupe tous les parametres ajustables en un seul endroit pour eviter les constantes dispersees dans le code.
+
+Elle sert a :
+- definir le comportement global (taille population, generations, etc.),
+- piloter l'exploration/exploitation (mutation, selection, immigrants),
+- encadrer la robustesse (stagnation, restart, arret).
+
+Exemple de champs typiques :
+
+```c
+typedef struct {
+    int population_size;
+    int nb_hop;
+    int max_generations;
+
+    int elite_count;
+    int tournament_k;
+    double selection_random_rate;
+
+    double mutation_rate_start;
+    double mutation_rate_end;
+    double mutation_rate_max; /* ex: 0.35 */
+
+    double immigrants_rate;
+    double immigrants_rate_max;
+
+    int restart_threshold;
+    int max_restarts;
+    int stagnation_limit;
+
+    double target_fitness;
+} GAConfig;
+```
+
+En pratique, une instance de `GAConfig` est chargee au demarrage (valeurs par defaut ou fichier), puis transmise aux fonctions d'initialisation, d'evaluation et d'evolution pour garder un comportement coherent et reproductible.
+
