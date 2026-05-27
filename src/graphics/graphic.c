@@ -5,10 +5,10 @@
 #include <MLV/MLV_all.h>
 
 #include "graphic.h"
-#include "map.h"
+#include "map/map.h"
 
-#include "municipality.h"
-#include "parser_csv.h"
+#include "../data/municipality.h"
+#include "../parsers/parser_csv.h"
 
 #define LAT_CENTER 46.5f
 #define WINDOW_WIDTH 1200

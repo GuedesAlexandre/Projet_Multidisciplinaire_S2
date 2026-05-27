@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <time.h>
 #include "./genetic/generation.h"
 #include "./data/municipality.h"
@@ -8,8 +9,11 @@
 #include "./genetic/crossover.h"
 #include "./genetic/selection.h"
 
-#define NB_HOP   500
-#define POP_SIZE 100
+#define NB_HOP        500
+#define POP_SIZE      100
+#define SOLUTION_CSV  "assets/best_solution_mock.csv"
+/* Limite de latitude pour l'optimisation de la distance (évite haversine inutile) */
+#define LAT_LIMIT     (HOSPITAL_RADIUS_KM / 111.0)
 
 static void compute_fitness_gen(const MunicipalityTable *table, Generation *gen)
 {
@@ -68,6 +72,89 @@ static void inject_elites(Generation *children, const Generation *gen,
     }
 }
 
+/* Retourne l'indice du meilleur individu dans la génération */
+static int get_best_index(const Generation *gen)
+{
+    int i, bi = 0;
+    for (i = 1; i < gen->size; i++)
+        if (gen->items[i].fitness > gen->items[bi].fitness)
+            bi = i;
+    return bi;
+}
+
+/*
+ * Exporte la solution du meilleur individu dans un CSV lu par generate_pdf.py.
+ * Format : insee_code,a_hopital,est_chru,hopital_desservant
+ * - a_hopital          : 1 si la commune est un hôpital dans la solution
+ * - est_chru           : 1 si hôpital et population >= CHRU_POP_THRESHOLD
+ * - hopital_desservant : insee_code du plus proche hôpital à <= 10 km, vide si désert
+ */
+static void export_solution(const MunicipalityTable *table,
+                             const Individu *best,
+                             const char *path)
+{
+    int *is_hospital;
+    FILE *f;
+    size_t i;
+    int j;
+    const Municipality *items = table->items;
+
+    is_hospital = (int *)calloc(table->count, sizeof(int));
+    if (!is_hospital) {
+        fprintf(stderr, "export_solution: allocation echouee\n");
+        return;
+    }
+
+    /* Marque les communes qui sont des hôpitaux */
+    for (j = 0; j < best->nb_hop; j++) {
+        int hi = best->indices[j];
+        if (hi >= 0 && (size_t)hi < table->count)
+            is_hospital[hi] = 1;
+    }
+
+    f = fopen(path, "w");
+    if (!f) {
+        fprintf(stderr, "export_solution: impossible d'ouvrir %s\n", path);
+        free(is_hospital);
+        return;
+    }
+
+    fprintf(f, "insee_code,a_hopital,est_chru,hopital_desservant\n");
+
+    for (i = 0; i < table->count; i++) {
+        int a_hop    = is_hospital[i];
+        int est_chru = (a_hop && items[i].population >= CHRU_POP_THRESHOLD) ? 1 : 0;
+        int nearest  = -1;
+        double best_dist = HOSPITAL_RADIUS_KM + 1.0;
+
+        /* Cherche le plus proche hôpital dans le rayon autorisé */
+        for (j = 0; j < best->nb_hop; j++) {
+            int hi = best->indices[j];
+            double dist;
+            if (hi < 0 || (size_t)hi >= table->count) continue;
+            if (fabs(items[i].latitude - items[hi].latitude) > LAT_LIMIT) continue;
+            dist = haversine_km(items[i].latitude, items[i].longitude,
+                                items[hi].latitude, items[hi].longitude);
+            if (dist < best_dist) {
+                best_dist = dist;
+                nearest   = hi;
+            }
+        }
+
+        if (nearest >= 0)
+            fprintf(f, "%d,%d,%d,%d\n",
+                    items[i].insee_code, a_hop, est_chru,
+                    items[nearest].insee_code);
+        else
+            fprintf(f, "%d,%d,%d,\n",
+                    items[i].insee_code, a_hop, est_chru);
+    }
+
+    fclose(f);
+    free(is_hospital);
+    printf("Solution exportee : %s\n", path);
+}
+
 int main()
 {
     int i;
@@ -80,7 +167,7 @@ int main()
 
     /* Chargement des communes */
     csv_parser_parse_file("./assets/communes-france-metrople-2025.csv", &table);
-    printf("Communes chargees : %d\n", table.count);
+    printf("Communes chargees : %ld\n", (long)table.count);
 
     /* 1. Generation initiale */
     generation_init_random(&gen, POP_SIZE, NB_HOP, table.count);
@@ -123,6 +210,16 @@ int main()
            get_best(&gen), get_avg(&gen));
     printf("Apres crossover     : meilleure = %.0f | moyenne = %.0f\n",
            get_best(&children), get_avg(&children));
+
+    /* 8. Export de la meilleure solution et generation du PDF */
+    {
+        int bi = get_best_index(&children);
+        int ret;
+        export_solution(&table, &children.items[bi], SOLUTION_CSV);
+        ret = system("python3 scripts/generate_pdf.py");
+        if (ret != 0)
+            fprintf(stderr, "Erreur lors de la generation du PDF (code %d)\n", ret);
+    }
 
     /* Liberation memoire */
     generation_free(&gen);
