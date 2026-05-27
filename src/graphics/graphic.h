@@ -5,8 +5,8 @@
  * @file graphic.h
  * @brief Header file for graphical display functions related to Municipality data.
  */
-#include "map/map.h"
-#include "municipality.h"
+#include "../graphics/map/map.h"
+#include "../data/municipality.h"
 #include <MLV/MLV_all.h>
 
 /**
