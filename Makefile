@@ -1,6 +1,6 @@
 CC := gcc
 CFLAGS := -Wall -ansi -O3
-LDFLAGS := -lm -lMLV
+LDFLAGS := -lMLV -lm
 
 TARGET := app
 SRCDIR := src
