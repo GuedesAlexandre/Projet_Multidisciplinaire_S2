@@ -54,21 +54,20 @@ void draw_hospitals_from_individu(Municipality* towns, int num_towns, Individu* 
 int generation_get_best_index(const Generation* gen);
 
 /**
- * @brief Displays the title and statistics of an individual at the top-left of the screen.
- * @param ind The individual whose statistics are to be displayed.
- * @param habitants_desert The number of inhabitants in medical deserts for this individual.
- * @param title The title text to display on the first line.
- * @param title_color The color used to draw the title.
+ * @brief Affiche l'état d'une génération : carte du meilleur individu + statistiques.
+ * @param bg         Image de fond (fond de carte sans hôpitaux).
+ * @param table      Table des communes.
+ * @param gen        Génération courante (évaluée).
+ * @param gen_index  Numéro de la génération (pour l'affichage).
+ * @param avg_fitness Fitness moyenne de la génération.
+ * @param total_population Population totale du territoire (pour le pourcentage).
  */
-void draw_individu_info(Individu* ind, long habitants_desert, const char* title, MLV_Color title_color);
-
-/**
- * @brief Displays an animation of the genetic algorithm's results.
- * @param table The municipality table.
- * @param gen The generation containing the evaluated individuals.
- * @param inhabitants_desert Array containing the number of inhabitants in medical deserts per individual.
- */
-void display_genetic_results(MunicipalityTable* table, Generation* gen, long* inhabitants_desert);
+void display_generation(MLV_Image *bg,
+                        const MunicipalityTable *table,
+                        const Generation *gen,
+                        int gen_index,
+                        double avg_fitness,
+                        long total_population);
 
 /**
  * @brief Closes the graphical window and releases associated resources.

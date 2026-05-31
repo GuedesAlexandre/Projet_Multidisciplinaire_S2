@@ -18,6 +18,8 @@ typedef struct {
     int    nb_hop;
     double fitness;
     int    nb_chru;
+    long   habitants_desert;
+    long   communes_desert;
 } Individu;
 
 /*

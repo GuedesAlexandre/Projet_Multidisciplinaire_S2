@@ -4,6 +4,9 @@
 #include "./genetic/ga.h"
 #include "./genetic/coverage.h"
 #include "./parsers/parser_csv.h"
+#include "./graphics/graphic.h"
+
+#define DISPLAY_INTERVAL_MS 100UL
 
 static void print_generation_summary(int generation_index,
                                      const MunicipalityTable *table,
@@ -26,19 +29,31 @@ static void print_generation_summary(int generation_index,
            mutation_rate);
 }
 
+static long compute_total_population(const MunicipalityTable *table)
+{
+    long total = 0;
+    int i;
+    for (i = 0; i < (int)table->count; i++)
+        total += table->items[i].population;
+    return total;
+}
+
 int main(void)
 {
-    int generation;
+    int generation = 0;
     int stagnation;
     int restart_count;
     double best_overall;
     double current_best;
     double immigrants_base;
+    long total_population;
+    unsigned long last_display;
     MunicipalityTable table;
     Generation gen;
     Generation next;
     GAConfig config;
     CoverageIndex coverage;
+    MLV_Image *bg;
 
     srand(time(NULL));
 
@@ -69,15 +84,27 @@ int main(void)
 
     if (ga_init_generation(&gen, &config, &table) != 0) {
         printf("Erreur generation initiale\n");
+        coverage_free(&coverage);
         municipality_table_free(&table);
         return 1;
     }
 
     ga_evaluate_generation(&table, &coverage, &gen);
 
+    total_population = compute_total_population(&table);
+
+    /* Initialisation de la fenêtre graphique */
+    init_window(WINDOW_WIDTH, WINDOW_HEIGHT);
+    bg = MLV_create_image(WINDOW_WIDTH, WINDOW_HEIGHT);
+    draw_map_of_towns(table.items, (int)table.count, bg);
+
     best_overall = ga_get_best_fitness(&gen);
     if (config.verbose)
         print_generation_summary(0, &table, &coverage, &gen, config.mutation_rate);
+    /* Affichage de la generation 0 : population initiale aleatoire */
+    display_generation(bg, &table, &gen, 0, ga_get_avg_fitness(&gen), total_population);
+
+    last_display = MLV_get_time();
 
     stagnation = 0;
     restart_count = 0;
@@ -135,6 +162,14 @@ int main(void)
 
             if (config.verbose)
                 print_generation_summary(generation, &table, &coverage, &next, config.mutation_rate);
+            /* Affichage throttle : seulement si DISPLAY_INTERVAL_MS ms se sont ecoulees */
+            {
+                unsigned long now = MLV_get_time();
+                if (now - last_display >= DISPLAY_INTERVAL_MS) {
+                    display_generation(bg, &table, &next, generation, ga_get_avg_fitness(&next), total_population);
+                    last_display = now;
+                }
+            }
 
             generation_free(&gen);
             gen = next;
@@ -166,6 +201,9 @@ int main(void)
 
                 if (config.verbose)
                     print_generation_summary(generation, &table, &coverage, &gen, config.mutation_rate);
+                /* Affichage apres un restart : on force le rendu pour signaler le changement */
+                display_generation(bg, &table, &gen, generation, ga_get_avg_fitness(&gen), total_population);
+                last_display = MLV_get_time();
 
                 continue;
             }
@@ -180,19 +218,12 @@ int main(void)
 
     printf("Meilleur fitness final: %.0f\n", best_overall);
 
-    for(i=0; i<gen.size; i++) {
-      gen.items[i].fitness=compute_fitness(&table, gen.items[i].indices, 500, &habitants_desert, &nb_chru);
-      gen.items[i].nb_chru=nb_chru;
-      habitants_desert_by_individu[i]=habitants_desert;
-    }
+    /* Affichage final : meilleur resultat obtenu (fenetre se ferme au clique) */
+    display_generation(bg, &table, &gen, generation, ga_get_avg_fitness(&gen), total_population);
+    MLV_wait_mouse(NULL, NULL);
 
-    for(i=0; i<gen.size; i++) {
-      printf("Individu %d: fitness = %f, nb_chru = %d, habitants_desert = %ld\n", i, gen.items[i].fitness, gen.items[i].nb_chru, habitants_desert_by_individu[i]);
-    }
-
-    display_genetic_results(&table, &gen, habitants_desert_by_individu);
-
-    free(habitants_desert_by_individu);
+    MLV_free_image(bg);
+    close_window();
     generation_free(&gen);
     coverage_free(&coverage);
     municipality_table_free(&table);
