@@ -144,7 +144,7 @@ int main(void)
                 immigrants_rate = config.immigrants_rate_max;
             config.immigrants_rate = immigrants_rate;
 
-            next = ga_next_generation(&gen, &config, (int)table.count);
+            next = ga_next_generation(&gen, &config, &table, &coverage);
             if (next.size == 0) {
                 printf("Erreur generation suivante\n");
                 break;

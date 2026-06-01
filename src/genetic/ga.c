@@ -12,20 +12,20 @@ GAConfig ga_config_default(void)
 {
     GAConfig cfg;
     cfg.population_size = 800;
-    cfg.nb_hop = 1120;
+    cfg.nb_hop = 2000;
     cfg.max_generations = 1000;
     cfg.elite_count = 2;
     cfg.tournament_k = 3;
-    cfg.mutation_rate_start = 0.20;
+    cfg.mutation_rate_start = 0.50;
     cfg.mutation_rate_end = 0.05;
     cfg.mutation_rate = cfg.mutation_rate_start;
-    cfg.immigrants_rate = 0.10;
+    cfg.immigrants_rate = 0.20;
     cfg.immigrants_rate_max = 0.40;
-    cfg.selection_random_rate = 0.05;
-    cfg.guided_mutation_rate = 0.03;
+    cfg.selection_random_rate = 0.10;
+    cfg.guided_mutation_rate = 0.10;
     cfg.restart_threshold = 30;
     cfg.max_restarts = 5;
-    cfg.target_fitness = 50000000.0;
+    cfg.target_fitness = 59000000.0;
     cfg.stagnation_limit = 120;
     cfg.verbose = 1;
     return cfg;
@@ -138,29 +138,30 @@ void ga_evaluate_generation(const MunicipalityTable *table,
 }
 
 static int randomize_individual_uniform(Individu *ind,
-                                        int nb_hop,
+                                        int max_nb_hop,
                                         int commune_count)
 {
     int j;
-    if (!ind || nb_hop <= 0 || commune_count <= 0) return 1;
-    if (nb_hop > commune_count) return 1;
+    int initial_hops = 1 + rand() % max_nb_hop;
+    if (!ind || max_nb_hop <= 0 || commune_count <= 0) return 1;
+    if (max_nb_hop > commune_count) return 1;
 
     if (ind->indices) {
         free(ind->indices);
         ind->indices = NULL;
     }
 
-    ind->indices = (int *)malloc(sizeof(int) * nb_hop);
+    ind->indices = (int *)malloc(sizeof(int) * initial_hops);
     if (!ind->indices) return 1;
 
-    for (j = 0; j < nb_hop; j++) {
+    for (j = 0; j < initial_hops; j++) {
         int cand = rand() % commune_count;
         while (contains_int(ind->indices, j, cand))
             cand = rand() % commune_count;
         ind->indices[j] = cand;
     }
 
-    ind->nb_hop = nb_hop;
+    ind->nb_hop = initial_hops;
     ind->fitness = 0.0;
     ind->nb_chru = 0;
     return 0;
@@ -283,7 +284,7 @@ static int ga_handle_crossover(const Generation *current, Generation *next, cons
         if (p1 < 0 || p2 < 0) return 1;
 
         if (crossover(&current->items[p1], &current->items[p2],
-                      &next->items[i], config->nb_hop) != 0) {
+                      &next->items[i]) != 0) {
             return 1;
         }
     }
@@ -316,19 +317,24 @@ static int ga_handle_immigrants(Generation *next, double immigrants_rate, int co
 
 Generation ga_next_generation(const Generation *current,
                               const GAConfig *config,
-                              int commune_count)
+                              const MunicipalityTable *table,
+                              const CoverageIndex *coverage)
 {
     Generation next;
     int pop_size;
     int elite_count;
+    int commune_count;
 
     next.items = NULL;
     next.size = 0;
     next.capacity = 0;
     next.best_index = -1;
 
-    if (!current || !config || !current->items) return next;
+    if (!current || !config || !current->items || !table || !coverage) return next;
     if (current->size <= 0) return next;
+    
+    commune_count = (int)table->count;
+    
     if (config->nb_hop <= 0 || commune_count <= 0) return next;
     if (config->nb_hop > commune_count) return next;
 
@@ -353,7 +359,15 @@ Generation ga_next_generation(const Generation *current,
         return next;
     }
 
+    /* 1. Mutation classique */
     if (mutation_generation(&next, commune_count, config->mutation_rate, elite_count) != 0) {
+        generation_free(&next);
+        next.size = 0;
+        return next;
+    }
+
+    /* 2. NOUVEAU : Mutation Guidée (Ciblée sur les déserts médicaux) */
+    if (ga_guided_mutation(&next, table, coverage, config->guided_mutation_rate, elite_count) != 0) {
         generation_free(&next);
         next.size = 0;
         return next;
@@ -458,7 +472,7 @@ int ga_guided_mutation(Generation *gen,
     if (!stamp) return 1;
 
     for (i = start_index; i < gen->size; i++) {
-        double r = rand() / RAND_MAX;
+        double r = (double)rand() / (double)RAND_MAX; /* ici je suis obligé de caster en double pour éviter un overflow dans le calcul du modulo */
         long total = 0;
         long rpick;
         int cand = -1;
@@ -505,7 +519,7 @@ int ga_guided_mutation(Generation *gen,
             continue;
         }
 
-        rpick = ((rand() / (RAND_MAX + 1.0)) * total);
+        rpick = ((double)rand() / (double)(RAND_MAX + 1.0)) * total;
         for (j = 0; j < count; j++) {
             if (stamp[j] != stamp_id) {
                 int w = table->items[j].population;

@@ -66,18 +66,19 @@ int generation_init_random(Generation* gen,
     gen->best_index = -1;
 
     for (i = 0; i < population_size; i++) {
+        int initial_hops = 1 + rand() % nb_hop;
         Individu* ind = &gen->items[i];
-        ind->nb_hop = nb_hop;
+        ind->nb_hop = initial_hops;
         ind->fitness = 0.0;
         ind->nb_chru = 0;
         ind->indices = NULL;
-        ind->indices = (int*)malloc(sizeof(int) * nb_hop);
+        ind->indices = (int*)malloc(sizeof(int) * initial_hops);
         if (!ind->indices) {
             gen->size = i;
             generation_free(gen);
             return 1;
         }
-        for (j = 0; j < nb_hop; j++) {
+        for (j = 0; j < initial_hops; j++) {
             int cand = rand() % commune_count;
             while (contains_int(ind->indices, j, cand)) cand = rand() % commune_count;
             ind->indices[j] = cand;
@@ -123,19 +124,20 @@ int generation_init_weighted(Generation* gen,
     gen->best_index = -1;
 
     for (i = 0; i < population_size; i++) {
+        int initial_hops = 1 + rand() % nb_hop;
         Individu* ind = &gen->items[i];
-        ind->nb_hop = nb_hop;
+        ind->nb_hop = initial_hops;
         ind->fitness = 0.0;
         ind->nb_chru = 0;
         ind->indices = NULL;
-        ind->indices = (int*)malloc(sizeof(int) * nb_hop);
+        ind->indices = (int*)malloc(sizeof(int) * initial_hops);
         if (!ind->indices) {
             gen->size = i;
             generation_free(gen);
             free(cumulative);
             return 1;
         }
-        for (j = 0; j < nb_hop; j++) {
+        for (j = 0; j < initial_hops; j++) {
             int cand = pick_unique_weighted(cumulative,
                                             commune_count,
                                             total,

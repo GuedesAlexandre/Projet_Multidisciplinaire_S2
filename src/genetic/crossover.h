@@ -30,11 +30,10 @@
  * @param child   Output individual. Its indices array is allocated inside
  *                this function; the caller must eventually free it via
  *                generation_free() or directly via free(child->indices).
- * @param nb_hop  Number of hospitals per individual (length of indices[]).
  * @return 0 on success, 1 on invalid input or allocation failure.
  */
 int crossover(const Individu *parent1, const Individu *parent2,
-              Individu *child, int nb_hop);
+              Individu *child);
 
 /**
  * @brief Produces a new generation by crossover with tournament selection.
@@ -44,14 +43,12 @@ int crossover(const Individu *parent1, const Individu *parent2,
  * If p1 == p2 after selection, a different p2 is drawn at random.
  *
  * @param gen The current generation used as the parent pool.
- * @param nb_hop Number of hospitals per individual.
  * @param tournament_k Tournament size for parent selection.
  * @return A newly allocated Generation containing gen->size children.
  *         On failure, the returned Generation has size == 0 and items == NULL.
  *         The caller is responsible for freeing it via generation_free().
  */
 Generation crossover_generation_new(const Generation *gen,
-                                    int nb_hop,
                                     int tournament_k);
 
 #endif /* CROSSOVER_H */
