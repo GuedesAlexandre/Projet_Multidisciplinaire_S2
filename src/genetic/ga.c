@@ -47,6 +47,7 @@ static double compute_fitness_indexed(const MunicipalityTable *table,
                                       const int *hospital_indices,
                                       int hospital_count,
                                       long *out_habitants_desert,
+                                      long *out_communes_desert,
                                       int *out_nb_chru,
                                       int *stamp,
                                       int stamp_id)
@@ -54,6 +55,7 @@ static double compute_fitness_indexed(const MunicipalityTable *table,
     size_t i;
     int j;
     long habitants_desert = 0;
+    long communes_desert = 0;
     int nb_chru = 0;
 
     if (!table || !coverage || !hospital_indices || hospital_count <= 0)
@@ -75,11 +77,14 @@ static double compute_fitness_indexed(const MunicipalityTable *table,
     }
 
     for (i = 0; i < table->count; i++) {
-        if (stamp[i] != stamp_id)
+        if (stamp[i] != stamp_id) {
             habitants_desert += table->items[i].population;
+            communes_desert++;
+        }
     }
 
     if (out_habitants_desert) *out_habitants_desert = habitants_desert;
+    if (out_communes_desert)  *out_communes_desert  = communes_desert;
     if (out_nb_chru) *out_nb_chru = nb_chru;
 
     return (double) FITNESS_BASE_POPULATION
@@ -105,15 +110,21 @@ void ga_evaluate_generation(const MunicipalityTable *table,
     if (!stamp) return;
 
     for (i = 0; i < gen->size; i++) {
-        gen->items[i].fitness = compute_fitness_indexed(table,
-                                                        coverage,
-                                                        gen->items[i].indices,
-                                                        gen->items[i].nb_hop,
-                                                        &habitants_desert,
-                                                        &nb_chru,
-                                                        stamp,
-                                                        stamp_id);
-        gen->items[i].nb_chru = nb_chru;
+        {
+            long communes_desert = 0;
+            gen->items[i].fitness = compute_fitness_indexed(table,
+                                                            coverage,
+                                                            gen->items[i].indices,
+                                                            gen->items[i].nb_hop,
+                                                            &habitants_desert,
+                                                            &communes_desert,
+                                                            &nb_chru,
+                                                            stamp,
+                                                            stamp_id);
+            gen->items[i].nb_chru          = nb_chru;
+            gen->items[i].habitants_desert = habitants_desert;
+            gen->items[i].communes_desert  = communes_desert;
+        }
 
         stamp_id++;
         if (stamp_id == INT_MAX) {
@@ -411,6 +422,7 @@ void ga_get_best_stats(const MunicipalityTable *table,
                                           gen->items[best_index].indices,
                                           gen->items[best_index].nb_hop,
                                           &habitants_desert,
+                                          NULL,
                                           &nb_chru,
                                           stamp,
                                           1);
