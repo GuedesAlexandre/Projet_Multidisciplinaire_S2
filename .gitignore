@@ -10,3 +10,8 @@ app
 # Compiled binaries
 *.o
 build/*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
