@@ -140,7 +140,7 @@ class RapportPDF(FPDF):
             return
         self.set_font("Helvetica", "I", 8)
         self.set_text_color(150, 150, 150)
-        self.cell(0, 6, "Rapport - Meilleure solution de couverture medicale", align="R")
+        self.cell(0, 6, "Rapport - Meilleure solution de couverture médicale", align="R")
         self.ln(2)
         self.set_draw_color(210, 210, 210)
         self.line(10, self.get_y(), 200, self.get_y())
@@ -219,7 +219,7 @@ class RapportPDF(FPDF):
 
     def page_departement(self, dept):
         self.add_page()
-        self._titre_section(f"Departement {dept['dept_code']} - {dept['dept_nom']}")
+        self._titre_section(f"Département {dept['dept_code']} - {dept['dept_nom']}")
 
         pct      = dept["habitants_desert"] / dept["pop_totale"] * 100 if dept["pop_totale"] > 0 else 0
         pct_com  = dept["nb_communes_desert"] / dept["nb_communes_total"] * 100 if dept["nb_communes_total"] > 0 else 0
@@ -305,25 +305,25 @@ class RapportPDF(FPDF):
             c = dept["commune_desert_max"]
             self.set_text_color(180, 60, 0)
             self.multi_cell(0, 6,
-                f"{c['nom']} : {_fmt(c['population'])} habitants sans couverture hospitaliere.")
+                f"{c['nom']} : {_fmt(c['population'])} habitants sans couverture hospitalière.")
         else:
             self.set_text_color(0, 130, 0)
-            self.multi_cell(0, 6, "Aucune commune en desert medical dans ce departement.")
+            self.multi_cell(0, 6, "Aucune commune en désert médical dans ce département.")
         self.set_text_color(30, 30, 30)
         self.ln(2)
 
         # --- Hôpital le plus sollicité ---
-        self._titre_sous_section("Hopital le plus sollicite")
+        self._titre_sous_section("Hôpital le plus sollicité")
         self.set_font("Helvetica", "", 10)
         if dept["hopital_max_charge"]:
             h = dept["hopital_max_charge"]
             self.set_text_color(30, 30, 30)
             self.multi_cell(0, 6,
                 f"{h['nom']} dessert {_fmt(h['pop_desservie'])} habitants "
-                f"(charge la plus elevee du departement).")
+                f"(charge la plus élevée du département).")
         else:
             self.set_text_color(150, 150, 150)
-            self.multi_cell(0, 6, "Aucun hopital dans ce departement.")
+            self.multi_cell(0, 6, "Aucun hôpital dans ce département.")
         self.set_text_color(30, 30, 30)
         self.ln(2)
 
@@ -344,7 +344,7 @@ class RapportPDF(FPDF):
                     f"({ecart:.2f} vs norme) : sous la norme nationale.")
         else:
             self.set_text_color(180, 60, 0)
-            self.multi_cell(0, 6, "Aucun lit recense dans ce departement.")
+            self.multi_cell(0, 6, "Aucun lit recensé dans ce département.")
         self.set_text_color(30, 30, 30)
 
     def _analyse_chru(self, hopitaux_df):
@@ -357,7 +357,7 @@ class RapportPDF(FPDF):
         self.set_font("Helvetica", "", 10)
         if not manquants:
             self.set_text_color(0, 130, 0)
-            self.multi_cell(0, 6, "Couverture CHRU satisfaisante pour ce departement.")
+            self.multi_cell(0, 6, "Couverture CHRU satisfaisante pour ce département.")
         else:
             self.set_text_color(180, 60, 0)
             for nom, pop in manquants:
