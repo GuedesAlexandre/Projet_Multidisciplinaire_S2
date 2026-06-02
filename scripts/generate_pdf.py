@@ -1,6 +1,10 @@
+import io
+
 import pandas as pd
 from fpdf import FPDF
 from datetime import date
+
+from map_render import render_national_map, render_department_map
 
 COMMUNES_CSV = "assets/communes-france-metrople-2025.csv"
 SOLUTION_CSV = "assets/best_solution_mock.csv"
@@ -16,7 +20,8 @@ COMMUNES_COLS = [
 ]
 
 # Ne pas laisser panda deviner les types pour éviter les erreurs
-COMMUNES_DTYPE = {"insee_code": int, "dept_code": int, "population": int}
+COMMUNES_DTYPE = {"insee_code": int, "dept_code": int, "population": int,
+                  "latitude": float, "longitude": float}
 SOLUTION_DTYPE = {"insee_code": int, "a_hopital": int, "est_chru": int}
 
 # Retourne un tableau pandas de toutes les datas
@@ -26,7 +31,9 @@ def load_data():
         header=None,
         names=COMMUNES_COLS,
         # Gain de temps et mémoire car on sait ce dont on a besoin
-        usecols=["insee_code", "nom", "dept_code", "dept_nom", "population"],
+        # latitude/longitude servent au tracé des cartes de couverture.
+        usecols=["insee_code", "nom", "dept_code", "dept_nom", "population",
+                 "latitude", "longitude"],
         dtype=COMMUNES_DTYPE,
     )
     solution = pd.read_csv(SOLUTION_CSV, dtype=SOLUTION_DTYPE)
@@ -97,6 +104,9 @@ def build_dept_stats(df, lits_df):
             "hopitaux":            hop_du_dept,
             "commune_desert_max":  commune_desert_max,
             "hopital_max_charge":  hopital_max_charge,
+            # Points géographiques du département pour la mini-carte de couverture.
+            "geo":                 groupe[["latitude", "longitude", "a_hopital",
+                                           "est_chru", "hopital_desservant"]],
         })
     return stats
 
@@ -185,20 +195,23 @@ class RapportPDF(FPDF):
         for label, val in items:
             self._ligne_stat(label, val)
 
-    def page_carte_et_classement(self, stats):
+    def page_carte_et_classement(self, stats, nat_map):
         self.add_page()
         self._titre_section("Carte de couverture")
 
-        # Zone réservée pour la carte Leaflet du collègue
-        y_carte = self.get_y()
-        self.set_fill_color(240, 242, 248)
-        self.set_draw_color(180, 190, 210)
-        self.rect(10, y_carte, 190, 95, style="FD")
-        self.set_font("Helvetica", "I", 11)
-        self.set_text_color(160, 160, 180)
-        self.set_xy(10, y_carte + 42)
-        self.cell(190, 10, "[ Emplacement réservé pour la carte Leaflet ]", align="C")
-        self.set_y(y_carte + 100)
+        if nat_map:
+            self._placer_image(*nat_map, max_w=150, max_h=130)
+        else:
+            # Repli si la carte n'a pas pu être générée.
+            y_carte = self.get_y()
+            self.set_fill_color(240, 242, 248)
+            self.set_draw_color(180, 190, 210)
+            self.rect(10, y_carte, 190, 95, style="FD")
+            self.set_font("Helvetica", "I", 11)
+            self.set_text_color(160, 160, 180)
+            self.set_xy(10, y_carte + 42)
+            self.cell(190, 10, "[ Carte de couverture indisponible ]", align="C")
+            self.set_y(y_carte + 100)
 
         self.ln(4)
         self._titre_section("Classement des départements par couverture")
@@ -224,6 +237,13 @@ class RapportPDF(FPDF):
         ]
         for label, val in items:
             self._ligne_stat(label, val)
+
+        self.ln(3)
+        self._titre_sous_section("Carte du département")
+        dept_map = render_department_map(dept.get("geo"), dept["dept_code"],
+                                         dept["dept_nom"])
+        if dept_map:
+            self._placer_image(*dept_map, max_w=120, max_h=95)
 
         self.ln(3)
         self._titre_sous_section("Hôpitaux du département")
@@ -346,6 +366,23 @@ class RapportPDF(FPDF):
 
     # --- helpers mise en page ---
 
+    def _placer_image(self, png, iw, ih, max_w, max_h):
+        # Insère une image PNG (depuis ses octets) centrée, en respectant son
+        # ratio et en tenant dans la boîte max_w x max_h (mm).
+        ratio = ih / iw
+        w = max_w
+        h = w * ratio
+        if h > max_h:
+            h = max_h
+            w = h / ratio
+        # Saut de page si l'image ne tient pas dans l'espace restant.
+        if self.get_y() + h > self.h - self.b_margin:
+            self.add_page()
+        x = (self.w - w) / 2          # centré sur la largeur de la page
+        y = self.get_y()
+        self.image(io.BytesIO(png), x=x, y=y, w=w, h=h)
+        self.set_y(y + h)
+
     def _titre_section(self, texte):
         self.set_font("Helvetica", "B", 13)
         self.set_text_color(30, 60, 120)
@@ -388,14 +425,16 @@ class RapportPDF(FPDF):
         self.ln()
 
 
-def generate_pdf(stats, global_stats):
+def generate_pdf(stats, global_stats, df):
     pdf = RapportPDF(orientation="P", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_margins(10, 15, 10)
 
+    nat_map = render_national_map(df)
+
     pdf.page_titre()
     pdf.page_resume_global(global_stats)
-    pdf.page_carte_et_classement(stats)
+    pdf.page_carte_et_classement(stats, nat_map)
     for dept in stats:
         pdf.page_departement(dept)
 
@@ -408,7 +447,7 @@ def main():
     lits_df      = compute_lits(df)
     stats        = build_dept_stats(df, lits_df)
     global_stats = build_global_stats(df, stats)
-    generate_pdf(stats, global_stats)
+    generate_pdf(stats, global_stats, df)
 
 
 if __name__ == "__main__":
