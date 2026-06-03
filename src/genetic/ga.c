@@ -12,20 +12,20 @@ GAConfig ga_config_default(void)
 {
     GAConfig cfg;
     cfg.population_size = 800;
-    cfg.nb_hop = 1120;
+    cfg.nb_hop = 2000;
     cfg.max_generations = 1000;
     cfg.elite_count = 2;
-    cfg.tournament_k = 3;
-    cfg.mutation_rate_start = 0.20;
+    cfg.tournament_k = 5;
+    cfg.mutation_rate_start = 0.30;
     cfg.mutation_rate_end = 0.05;
     cfg.mutation_rate = cfg.mutation_rate_start;
     cfg.immigrants_rate = 0.10;
-    cfg.immigrants_rate_max = 0.40;
-    cfg.selection_random_rate = 0.05;
-    cfg.guided_mutation_rate = 0.03;
+    cfg.immigrants_rate_max = 0.30;
+    cfg.selection_random_rate = 0.10;
+    cfg.guided_mutation_rate = 0.40;
     cfg.restart_threshold = 30;
     cfg.max_restarts = 5;
-    cfg.target_fitness = 50000000.0;
+    cfg.target_fitness = 55000000.0;
     cfg.stagnation_limit = 120;
     cfg.verbose = 1;
     return cfg;
@@ -36,10 +36,7 @@ int ga_init_generation(Generation *gen,
                         const MunicipalityTable *table)
 {
     if (!config || !table) return 1;
-    return generation_init_weighted(gen,
-                                    config->population_size,
-                                    config->nb_hop,
-                                    table);
+    return generation_init_random(gen, config->population_size, config->nb_hop, (int)table->count);
 }
 
 static double compute_fitness_indexed(const MunicipalityTable *table,
@@ -90,7 +87,7 @@ static double compute_fitness_indexed(const MunicipalityTable *table,
     return (double) FITNESS_BASE_POPULATION
          - habitants_desert
          - (double)(FITNESS_PENALTY_HOP * hospital_count)
-         + (double)(FITNESS_BONUS_CHRU * nb_chru); /*Je suis ici obligé de caster en double pour éviter un overflow dans le calcul du bonus CHRU, qui peut dépasser la capacité d'un int sur 32 bits*/ 
+         + (double)(FITNESS_BONUS_CHRU * nb_chru); /*Je suis ici obligé de caster en double pour éviter un overflow dans le calcul du bonus CHRU, qui peut dépasser la capacité d'un int sur 32 bits*/
 }
 
 void ga_evaluate_generation(const MunicipalityTable *table,
@@ -138,29 +135,30 @@ void ga_evaluate_generation(const MunicipalityTable *table,
 }
 
 static int randomize_individual_uniform(Individu *ind,
-                                        int nb_hop,
+                                        int max_nb_hop,
                                         int commune_count)
 {
     int j;
-    if (!ind || nb_hop <= 0 || commune_count <= 0) return 1;
-    if (nb_hop > commune_count) return 1;
+    int initial_hops = 1 + rand() % max_nb_hop;
+    if (!ind || max_nb_hop <= 0 || commune_count <= 0) return 1;
+    if (max_nb_hop > commune_count) return 1;
 
     if (ind->indices) {
         free(ind->indices);
         ind->indices = NULL;
     }
 
-    ind->indices = (int *)malloc(sizeof(int) * nb_hop);
+    ind->indices = (int *)malloc(sizeof(int) * initial_hops);
     if (!ind->indices) return 1;
 
-    for (j = 0; j < nb_hop; j++) {
+    for (j = 0; j < initial_hops; j++) {
         int cand = rand() % commune_count;
         while (contains_int(ind->indices, j, cand))
             cand = rand() % commune_count;
         ind->indices[j] = cand;
     }
 
-    ind->nb_hop = nb_hop;
+    ind->nb_hop = initial_hops;
     ind->fitness = 0.0;
     ind->nb_chru = 0;
     return 0;
@@ -283,7 +281,7 @@ static int ga_handle_crossover(const Generation *current, Generation *next, cons
         if (p1 < 0 || p2 < 0) return 1;
 
         if (crossover(&current->items[p1], &current->items[p2],
-                      &next->items[i], config->nb_hop) != 0) {
+                      &next->items[i]) != 0) {
             return 1;
         }
     }
@@ -316,19 +314,24 @@ static int ga_handle_immigrants(Generation *next, double immigrants_rate, int co
 
 Generation ga_next_generation(const Generation *current,
                               const GAConfig *config,
-                              int commune_count)
+                              const MunicipalityTable *table,
+                              const CoverageIndex *coverage)
 {
     Generation next;
     int pop_size;
     int elite_count;
+    int commune_count;
 
     next.items = NULL;
     next.size = 0;
     next.capacity = 0;
     next.best_index = -1;
 
-    if (!current || !config || !current->items) return next;
+    if (!current || !config || !current->items || !table || !coverage) return next;
     if (current->size <= 0) return next;
+
+    commune_count = (int)table->count;
+
     if (config->nb_hop <= 0 || commune_count <= 0) return next;
     if (config->nb_hop > commune_count) return next;
 
@@ -353,7 +356,15 @@ Generation ga_next_generation(const Generation *current,
         return next;
     }
 
+    /* 1. Mutation classique */
     if (mutation_generation(&next, commune_count, config->mutation_rate, elite_count) != 0) {
+        generation_free(&next);
+        next.size = 0;
+        return next;
+    }
+
+    /* 2. Mutation Guidée (Ciblée sur les déserts médicaux) */
+    if (ga_guided_mutation(&next, table, coverage, config->guided_mutation_rate, 0) != 0) {
         generation_free(&next);
         next.size = 0;
         return next;
@@ -433,117 +444,113 @@ void ga_get_best_stats(const MunicipalityTable *table,
     if (out_habitants_desert) *out_habitants_desert = habitants_desert;
     if (out_nb_chru) *out_nb_chru = nb_chru;
 }
+/* Nombre d'ajouts rentables tentes par individu et taille de l'echantillon. */
+  #define GUIDED_MAX_ROUNDS    5 /* Cette constante contrôle le nombre maximal de rounds de mutation guidée. */
+  #define GUIDED_SAMPLE_TRIES  40 /* Cette constante contrôle le nombre maximal de tentatives d'échantillonnage pour chaque round. */
+  /* Des rounds ? Des échantillons ?
+   * Un round est une itération de mutation guidée, un échantillon est un sous-ensemble de la population.
+    */
 
-int ga_guided_mutation(Generation *gen,
-                       const MunicipalityTable *table,
-                       const CoverageIndex *coverage,
-                       double guided_rate,
-                       int start_index)
-{
-    int i, j;
-    int count;
-    int *stamp;
-    int stamp_id = 0;
+  int ga_guided_mutation(Generation *gen,
+                         const MunicipalityTable *table,
+                         const CoverageIndex *coverage,
+                         double guided_rate,
+                         int start_index)
+  {
+      int i, j, k;
+      int count;
+      int *cover_count;
 
-    if (!gen || !table || !coverage || !gen->items) return 1;
-    if ((int)table->count != coverage->count) return 1;
+      if (!gen || !table || !coverage || !gen->items) return 1;
+      if ((int)table->count != coverage->count) return 1;
+      if (guided_rate <= 0.0) return 0;
+      if (start_index < 0) start_index = 0;
+      if (start_index >= gen->size) return 0;
 
-    if (guided_rate <= 0.0) return 0;
+      count = (int)table->count;
+      cover_count = (int *)malloc(sizeof(int) * count);
+      if (!cover_count) return 1;
 
-    if (start_index < 0) start_index = 0;
-    if (start_index >= gen->size) return 0;
+      for (i = start_index; i < gen->size; i++) {
+          double r = (double)rand() / (double)RAND_MAX;
+          Individu *ind = &gen->items[i];
+          int round;
 
-    count = (int)table->count;
-    stamp = (int *)calloc(count, sizeof(int));
-    if (!stamp) return 1;
+          if (!ind->indices || ind->nb_hop <= 0) continue;
+          if (ind->nb_hop > count) continue;
+          if (r >= guided_rate) continue;
 
-    for (i = start_index; i < gen->size; i++) {
-        double r = rand() / RAND_MAX;
-        long total = 0;
-        long rpick;
-        int cand = -1;
-        int replace_pos = 0;
-        int min_cov = INT_MAX;
-        int hi;
+          /* cover_count[c] = nb d'hopitaux de l'individu qui couvrent la commune c */
+          for (j = 0; j < count; j++) cover_count[j] = 0;
+          for (j = 0; j < ind->nb_hop; j++) {
+              int hi = ind->indices[j];
+              if (hi < 0 || hi >= count) continue;
+              for (k = coverage->offsets[hi]; k < coverage->offsets[hi + 1]; k++)
+                  cover_count[coverage->indices[k]]++;
+          }
 
-        stamp_id++;
-        if (stamp_id == INT_MAX) {
-            int k;
-            for (k = 0; k < count; k++) stamp[k] = 0;
-            stamp_id = 1;
-        }
+          /* 1. AJOUTS gain-gardes : on ne pose un hopital que s'il couvre plus de
+                5000 habitants encore en desert (sinon il coute plus qu'il rapporte). */
+          for (round = 0; round < GUIDED_MAX_ROUNDS; round++) {
+              int best_cand = -1;
+              long best_gain = 0;
+              int tries;
+              if (ind->nb_hop >= count) break;
 
-        Individu *ind = &gen->items[i];
-        if (!ind->indices || ind->nb_hop <= 0) continue;
-        if (ind->nb_hop > count) continue;
+              for (tries = 0; tries < GUIDED_SAMPLE_TRIES; tries++) {
+                  int c = rand() % count;
+                  long gain = 0;
+                  if (cover_count[c] != 0) continue; /* commune deja couverte */
+                  for (k = coverage->offsets[c]; k < coverage->offsets[c + 1]; k++) {
+                      int cc = coverage->indices[k];
+                      if (cover_count[cc] == 0) gain += table->items[cc].population;
+                  }
+                  if (gain > best_gain) { best_gain = gain; best_cand = c; }
+              }
 
-        if (r >= guided_rate) continue;
+              if (best_cand < 0 || best_gain <= (long)FITNESS_PENALTY_HOP) break;
 
-        for (j = 0; j < ind->nb_hop; j++) {
-            int start;
-            int end;
-            int k;
-            hi = ind->indices[j];
-            if (hi < 0 || hi >= count) continue;
-            start = coverage->offsets[hi];
-            end = coverage->offsets[hi + 1];
-            for (k = start; k < end; k++) {
-                int covered_idx = coverage->indices[k];
-                stamp[covered_idx] = stamp_id;
-            }
-        }
+              {
+                  int *grown = (int *)realloc(ind->indices,
+                                              sizeof(int) * (ind->nb_hop + 1));
+                  if (!grown) break;
+                  ind->indices = grown;
+                  ind->indices[ind->nb_hop++] = best_cand;
+                  for (k = coverage->offsets[best_cand]; k < coverage->offsets[best_cand +
+  1]; k++)
+                      cover_count[coverage->indices[k]]++;
+              }
+          }
 
-        for (j = 0; j < count; j++) {
-            if (stamp[j] != stamp_id) {
-                int w = table->items[j].population;
-                if (w <= 0) w = 1;
-                total += w;
-            }
-        }
+          /* 2. ELAGAGE : on retire les hopitaux dont la couverture UNIQUE (communes
+                qu'eux seuls couvrent) pese moins que la penalite de 5000. Les
+                retirer fait GAGNER de la fitness (on economise les 5000). */
+          j = 0;
+          while (j < ind->nb_hop && ind->nb_hop > 1) {
+              int hi = ind->indices[j];
+              int unique_pop = 0;
+              if (hi < 0 || hi >= count) { j++; continue; }
+              for (k = coverage->offsets[hi]; k < coverage->offsets[hi + 1]; k++) {
+                  int c = coverage->indices[k];
+                  if (cover_count[c] == 1) unique_pop += table->items[c].population;
+              }
+              if (unique_pop < FITNESS_PENALTY_HOP) {
+                  for (k = coverage->offsets[hi]; k < coverage->offsets[hi + 1]; k++)
+                      cover_count[coverage->indices[k]]--;
+                  ind->indices[j] = ind->indices[ind->nb_hop - 1];
+                  ind->nb_hop--;
+              } else {
+                  j++;
+              }
+          }
+      }
 
-        if (total <= 0) {
-            continue;
-        }
+      free(cover_count);
+      return 0;
+  }
 
-        rpick = ((rand() / (RAND_MAX + 1.0)) * total);
-        for (j = 0; j < count; j++) {
-            if (stamp[j] != stamp_id) {
-                int w = table->items[j].population;
-                if (w <= 0) w = 1;
-                if (rpick < w) {
-                    cand = j;
-                    break;
-                }
-                rpick -= w;
-            }
-        }
 
-        if (cand < 0) {
-            for (j = 0; j < count; j++) {
-                if (stamp[j] != stamp_id) {
-                    cand = j;
-                    break;
-                }
-            }
-        }
 
-        if (cand >= 0) {
-            for (j = 0; j < ind->nb_hop; j++) {
-                hi = ind->indices[j];
-                if (hi < 0 || hi >= count) continue;
-                if (coverage->offsets[hi + 1] - coverage->offsets[hi] < min_cov) {
-                    min_cov = coverage->offsets[hi + 1] - coverage->offsets[hi];
-                    replace_pos = j;
-                }
-            }
-            ind->indices[replace_pos] = cand;
-        }
-
-    }
-
-    free(stamp);
-    return 0;
-}
 
 int ga_reseed_generation(Generation *gen,
                          const GAConfig *config,
@@ -573,13 +580,6 @@ int ga_reseed_generation(Generation *gen,
         }
     }
 
-    if (generation_init_weighted(&new_gen,
-                                 gen->size,
-                                 config->nb_hop,
-                                 table) != 0) {
-        if (elite_indices) free(elite_indices);
-        return 1;
-    }
 
     for (i = 0; i < keep_elites; i++) {
         if (copy_individual(&gen->items[elite_indices[i]],

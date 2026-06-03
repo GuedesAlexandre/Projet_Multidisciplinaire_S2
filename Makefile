@@ -10,6 +10,7 @@ SRC := \
 	$(SRCDIR)/main.c \
 	$(SRCDIR)/data/municipality.c \
 	$(SRCDIR)/parsers/parser_csv.c \
+	$(SRCDIR)/parsers/csv_export.c \
 	$(SRCDIR)/genetic/generation.c \
 	$(SRCDIR)/genetic/fitness.c \
 	$(SRCDIR)/genetic/selection.c \

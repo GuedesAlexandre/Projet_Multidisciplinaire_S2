@@ -25,63 +25,77 @@
  * @param nb_hop  Number of hospitals per individual.
  * @return 0 on success, 1 on error.
  */
-int crossover(const Individu *parent1, const Individu *parent2,
-              Individu *child, int nb_hop)
-{
-    int i, j, found;
-    int candidate;
+ int crossover(const Individu *parent1, const Individu *parent2,
+                Individu *child)
+  {
+      int i, j, found;
+      int candidate;
+      int min_len, max_len, child_nb_hop;
 
-    if (!parent1 || !parent2 || !child)
-        return 1;
-    if (!parent1->indices || !parent2->indices)
-        return 1;
+      if (!parent1 || !parent2 || !child)
+          return 1;
+      if (!parent1->indices || !parent2->indices)
+          return 1;
+  
+      min_len = (parent1->nb_hop < parent2->nb_hop) ? parent1->nb_hop : parent2->nb_hop;
+      max_len = (parent1->nb_hop > parent2->nb_hop) ? parent1->nb_hop : parent2->nb_hop;
+      if (max_len == min_len) {
+          child_nb_hop = min_len;
+      } else {
+          child_nb_hop = min_len + (rand() % (max_len - min_len + 1));
+      }
 
-    child->indices = (int *)malloc(sizeof(int) * nb_hop);
-    if (!child->indices)
-        return 1;
-    child->nb_hop = nb_hop;
-    child->fitness = 0.0;
-    child->nb_chru = 0;
+      if (child_nb_hop < 1) child_nb_hop = 1;
 
-    for (i = 0; i < nb_hop; i++)
-    {
+      child->indices = (int *)malloc(sizeof(int) * child_nb_hop);
+      if (!child->indices)
+          return 1;
+      child->nb_hop = child_nb_hop;
+      child->fitness = 0.0;
+      child->nb_chru = 0;
+  
+      for (i = 0; i < child_nb_hop; i++)
+      {
+          int cand1 = (i < parent1->nb_hop) ? parent1->indices[i] : parent1->indices[rand() %
+  parent1->nb_hop];
+          int cand2 = (i < parent2->nb_hop) ? parent2->indices[i] : parent2->indices[rand() %
+  parent2->nb_hop];
 
-        candidate = ((rand() % 2) == 0)
-                        ? parent1->indices[i]
-                        : parent2->indices[i];
+          candidate = ((rand() % 2) == 0) ? cand1 : cand2;
 
-        if (!contains_int(child->indices, i, candidate))
-        {
-            child->indices[i] = candidate;
-            continue;
-        }
+          if (!contains_int(child->indices, i, candidate))
+          {
+              child->indices[i] = candidate;
+              continue;
+          }
 
-        found = 0;
-        for (j = 0; j < nb_hop && !found; j++)
-        {
-            if (!contains_int(child->indices, i, parent2->indices[j]))
-            {
-                candidate = parent2->indices[j];
-                found = 1;
-            }
-        }
-        if (!found)
-        {
-            for (j = 0; j < nb_hop && !found; j++)
-            {
-                if (!contains_int(child->indices, i, parent1->indices[j]))
-                {
-                    candidate = parent1->indices[j];
-                    found = 1;
-                }
-            }
-        }
+          found = 0;
+          for (j = 0; j < parent2->nb_hop && !found; j++)
+          {
+              if (!contains_int(child->indices, i, parent2->indices[j]))
+              {
+                  candidate = parent2->indices[j];
+                  found = 1;
+              }
+          }
+          if (!found)
+          {
+              for (j = 0; j < parent1->nb_hop && !found; j++)
+              {
+                  if (!contains_int(child->indices, i, parent1->indices[j]))
+                  {
+                      candidate = parent1->indices[j];
+                      found = 1;
+                  }
+              }
+          }
 
-        child->indices[i] = candidate;
-    }
+          child->indices[i] = candidate;
+      }
 
-    return 0;
-}
+      return 0;
+  }
+
 
 /**
  * @brief Produces a new generation via tournament selection and crossover.
@@ -96,7 +110,6 @@ int crossover(const Individu *parent1, const Individu *parent2,
  *         or an empty Generation (size == 0) on failure.
  */
 Generation crossover_generation_new(const Generation *gen,
-                                    int nb_hop,
                                     int tournament_k)
 {
     Generation children;
@@ -108,7 +121,7 @@ Generation crossover_generation_new(const Generation *gen,
     children.capacity = 0;
     children.best_index = -1;
 
-    if (!gen || nb_hop <= 0 || gen->size <= 0)
+    if (!gen || gen->size <= 0 || tournament_k <= 0)
         return children;
     if (tournament_k <= 0)
         tournament_k = 1;
@@ -147,7 +160,7 @@ Generation crossover_generation_new(const Generation *gen,
         }
 
         if (crossover(&gen->items[p1], &gen->items[p2],
-                      &children.items[i], nb_hop) != 0)
+                      &children.items[i]) != 0)
         {
             children.size = i;
             generation_free(&children);

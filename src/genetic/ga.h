@@ -54,7 +54,8 @@ void ga_evaluate_generation(const MunicipalityTable *table,
  */
 Generation ga_next_generation(const Generation *current,
                               const GAConfig *config,
-                              int commune_count);
+                              const MunicipalityTable *table,
+                              const CoverageIndex *coverage);
 
 /**
  * @brief Returns the best fitness in a generation.
