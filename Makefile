@@ -1,6 +1,6 @@
 CC := gcc
 CFLAGS := -Wall -ansi -O3
-LDFLAGS := -lm -lMLV -lSDL
+LDFLAGS := -lMLV -lm
 
 TARGET := app
 SRCDIR := src
@@ -10,13 +10,17 @@ SRC := \
 	$(SRCDIR)/main.c \
 	$(SRCDIR)/data/municipality.c \
 	$(SRCDIR)/parsers/parser_csv.c \
+	$(SRCDIR)/parsers/csv_export.c \
 	$(SRCDIR)/genetic/generation.c \
 	$(SRCDIR)/genetic/fitness.c \
 	$(SRCDIR)/genetic/selection.c \
 	$(SRCDIR)/genetic/mutation.c \
 	$(SRCDIR)/genetic/crossover.c \
+	$(SRCDIR)/genetic/ga.c \
+	$(SRCDIR)/genetic/coverage.c \
 	$(SRCDIR)/graphics/graphic.c \
-	$(SRCDIR)/graphics/map/map.c
+	$(SRCDIR)/graphics/map/map.c \
+	$(SRCDIR)/tools/tools.c
 
 OBJ := $(SRC:.c=.o)
 

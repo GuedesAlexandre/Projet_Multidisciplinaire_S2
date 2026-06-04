@@ -7,7 +7,7 @@ from datetime import date
 from map_render import render_national_map, render_department_map
 
 COMMUNES_CSV = "assets/communes-france-metrople-2025.csv"
-SOLUTION_CSV = "assets/best_solution_mock.csv"
+SOLUTION_CSV = "assets/best_solution.csv"   # produit par l'algo génétique (csv_export.c)
 OUTPUT_PDF   = "rapport_meilleure_generation.pdf"
 
 # D'après le sujet : Dimensionner les hoptiaux en nombre de lits pour garantir une moyenne de 5.40 lits d'hopitaux partout sur le territoire + https://fr.tradingeconomics.com/france/hospital-beds.

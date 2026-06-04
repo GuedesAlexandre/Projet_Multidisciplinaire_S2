@@ -1,11 +1,7 @@
 #include "generation.h"
 #include <time.h>
+#include "../tools/tools.h"
 
-static int contains_int(const int* arr, int len, int v) {
-    int i;
-    for (i = 0; i < len; i++) if (arr[i] == v) return 1;
-    return 0;
-}
 
 int generation_init_random(Generation* gen,
                            int population_size,
@@ -13,6 +9,7 @@ int generation_init_random(Generation* gen,
                            int commune_count) {
     int i, j;
     if (!gen || population_size <= 0 || nb_hop <= 0 || commune_count <= 0) return 1;
+    if (nb_hop > commune_count) return 1;
 
     gen->items = (Individu*)malloc(sizeof(Individu) * population_size);
     if (gen->items == NULL) return 1;
@@ -22,14 +19,19 @@ int generation_init_random(Generation* gen,
     gen->best_index = -1;
 
     for (i = 0; i < population_size; i++) {
+        int initial_hops = 1 + rand() % nb_hop;
         Individu* ind = &gen->items[i];
-        ind->nb_hop = nb_hop;
+        ind->nb_hop = initial_hops;
         ind->fitness = 0.0;
         ind->nb_chru = 0;
-        ind->indices = (int*)malloc(sizeof(int) * nb_hop);
-        if (!ind->indices) return 1;
-  /* ici j'ai besoin de faire en sorte de pas définir deux hopitaux dans les même ville on veut éviter les doublons */
-        for (j = 0; j < nb_hop; j++) {
+        ind->indices = NULL;
+        ind->indices = (int*)malloc(sizeof(int) * initial_hops);
+        if (!ind->indices) {
+            gen->size = i;
+            generation_free(gen);
+            return 1;
+        }
+        for (j = 0; j < initial_hops; j++) {
             int cand = rand() % commune_count;
             while (contains_int(ind->indices, j, cand)) cand = rand() % commune_count;
             ind->indices[j] = cand;

@@ -1,229 +1,263 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 #include <time.h>
-#include "./genetic/generation.h"
-#include "./data/municipality.h"
+#include "./genetic/ga.h"
+#include "./genetic/coverage.h"
 #include "./parsers/parser_csv.h"
-#include "./genetic/fitness.h"
-#include "./genetic/crossover.h"
-#include "./genetic/selection.h"
+#include "./parsers/csv_export.h"
+#include "./graphics/graphic.h"
 
-#define NB_HOP        500
-#define POP_SIZE      100
-#define SOLUTION_CSV  "assets/best_solution_mock.csv"
-/* Limite de latitude pour l'optimisation de la distance (évite haversine inutile) */
-#define LAT_LIMIT     (HOSPITAL_RADIUS_KM / 111.0)
+#define DISPLAY_INTERVAL_MS 100UL
 
-static void compute_fitness_gen(const MunicipalityTable *table, Generation *gen)
+static void print_generation_summary(int generation_index,
+                                     const MunicipalityTable *table,
+                                     const CoverageIndex *coverage,
+                                     const Generation *gen,
+                                     double mutation_rate)
 {
+    double best_fitness = 0.0;
+    long habitants_desert = 0;
+    int nb_chru = 0;
+
+    ga_get_best_stats(table, coverage, gen, &best_fitness, &habitants_desert, &nb_chru);
+
+    printf("Gen %d | Best = %.0f | Avg = %.0f | Desert = %ld | CHRU = %d | Mut = %.3f\n",
+           generation_index,
+           best_fitness,
+           ga_get_avg_fitness(gen),
+           habitants_desert,
+           nb_chru,
+           mutation_rate);
+}
+
+static long compute_total_population(const MunicipalityTable *table)
+{
+    long total = 0;
     int i;
-    long habitants_desert;
-    int nb_chru;
-    for (i = 0; i < gen->size; i++) {
-        gen->items[i].fitness = compute_fitness(table, gen->items[i].indices,
-                                                NB_HOP, &habitants_desert, &nb_chru);
-        gen->items[i].nb_chru = nb_chru;
-    }
+    for (i = 0; i < (int)table->count; i++)
+        total += table->items[i].population;
+    return total;
 }
 
-static double get_best(const Generation *gen)
+int main(void)
 {
-    int i;
-    double best = 0.0;
-    for (i = 0; i < gen->size; i++)
-        if (gen->items[i].fitness > best) best = gen->items[i].fitness;
-    return best;
-}
-
-static double get_avg(const Generation *gen)
-{
-    int i;
-    double avg = 0.0;
-    for (i = 0; i < gen->size; i++) avg += gen->items[i].fitness;
-    return avg / gen->size;
-}
-
-static void print_gen(const Generation *gen, const char *label)
-{
-    int i;
-    printf("\n=== %s (%d individus) ===\n", label, gen->size);
-    for (i = 0; i < gen->size; i++)
-        printf("Individu %d: fitness = %.0f, nb_chru = %d\n",
-               i, gen->items[i].fitness, gen->items[i].nb_chru);
-    printf(">> Meilleure = %.0f | Moyenne = %.0f\n",
-           get_best(gen), get_avg(gen));
-}
-
-static void inject_elites(Generation *children, const Generation *gen,
-                           const int *elites)
-{
-    int i, j, last;
-    for (i = 0; i < ELITE_COUNT; i++) {
-        last = children->size - 1 - i;
-        free(children->items[last].indices);
-        children->items[last].indices = (int *)malloc(sizeof(int) * NB_HOP);
-        if (!children->items[last].indices) continue;
-        for (j = 0; j < NB_HOP; j++)
-            children->items[last].indices[j] = gen->items[elites[i]].indices[j];
-        children->items[last].fitness = gen->items[elites[i]].fitness;
-        children->items[last].nb_chru = gen->items[elites[i]].nb_chru;
-        children->items[last].nb_hop  = NB_HOP;
-    }
-}
-
-/* Retourne l'indice du meilleur individu dans la génération */
-static int get_best_index(const Generation *gen)
-{
-    int i, bi = 0;
-    for (i = 1; i < gen->size; i++)
-        if (gen->items[i].fitness > gen->items[bi].fitness)
-            bi = i;
-    return bi;
-}
-
-/*
- * Exporte la solution du meilleur individu dans un CSV lu par generate_pdf.py.
- * Format : insee_code,a_hopital,est_chru,hopital_desservant
- * - a_hopital          : 1 si la commune est un hôpital dans la solution
- * - est_chru           : 1 si hôpital et population >= CHRU_POP_THRESHOLD
- * - hopital_desservant : insee_code du plus proche hôpital à <= 10 km, vide si désert
- */
-static void export_solution(const MunicipalityTable *table,
-                             const Individu *best,
-                             const char *path)
-{
-    int *is_hospital;
-    FILE *f;
-    size_t i;
-    int j;
-    const Municipality *items = table->items;
-
-    is_hospital = (int *)calloc(table->count, sizeof(int));
-    if (!is_hospital) {
-        fprintf(stderr, "export_solution: allocation echouee\n");
-        return;
-    }
-
-    /* Marque les communes qui sont des hôpitaux */
-    for (j = 0; j < best->nb_hop; j++) {
-        int hi = best->indices[j];
-        if (hi >= 0 && (size_t)hi < table->count)
-            is_hospital[hi] = 1;
-    }
-
-    f = fopen(path, "w");
-    if (!f) {
-        fprintf(stderr, "export_solution: impossible d'ouvrir %s\n", path);
-        free(is_hospital);
-        return;
-    }
-
-    fprintf(f, "insee_code,a_hopital,est_chru,hopital_desservant\n");
-
-    for (i = 0; i < table->count; i++) {
-        int a_hop    = is_hospital[i];
-        int est_chru = (a_hop && items[i].population >= CHRU_POP_THRESHOLD) ? 1 : 0;
-        int nearest  = -1;
-        double best_dist = HOSPITAL_RADIUS_KM + 1.0;
-
-        /* Cherche le plus proche hôpital dans le rayon autorisé */
-        for (j = 0; j < best->nb_hop; j++) {
-            int hi = best->indices[j];
-            double dist;
-            if (hi < 0 || (size_t)hi >= table->count) continue;
-            if (fabs(items[i].latitude - items[hi].latitude) > LAT_LIMIT) continue;
-            dist = haversine_km(items[i].latitude, items[i].longitude,
-                                items[hi].latitude, items[hi].longitude);
-            if (dist < best_dist) {
-                best_dist = dist;
-                nearest   = hi;
-            }
-        }
-
-        if (nearest >= 0)
-            fprintf(f, "%d,%d,%d,%d\n",
-                    items[i].insee_code, a_hop, est_chru,
-                    items[nearest].insee_code);
-        else
-            fprintf(f, "%d,%d,%d,\n",
-                    items[i].insee_code, a_hop, est_chru);
-    }
-
-    fclose(f);
-    free(is_hospital);
-    printf("Solution exportee : %s\n", path);
-}
-
-int main()
-{
-    int i;
+    int generation = 0;
+    int stagnation;
+    int restart_count;
+    double best_overall;
+    double current_best;
+    double immigrants_base;
+    long total_population;
+    unsigned long last_display;
     MunicipalityTable table;
     Generation gen;
-    Generation children;
-    int elites[ELITE_COUNT];
+    Generation next;
+    GAConfig config;
+    CoverageIndex coverage;
+    MLV_Image *bg;
 
     srand(time(NULL));
 
-    /* Chargement des communes */
     csv_parser_parse_file("./assets/communes-france-metrople-2025.csv", &table);
-    printf("Communes chargees : %ld\n", (long)table.count);
+    printf("Communes chargees : %d\n", (int)table.count);
 
-    /* 1. Generation initiale */
-    generation_init_random(&gen, POP_SIZE, NB_HOP, table.count);
-
-    /* 2. Calcul fitness */
-    compute_fitness_gen(&table, &gen);
-    print_gen(&gen, "Generation initiale");
-
-    /* 3. Identification des elites */
-    for (i = 0; i < ELITE_COUNT; i++) elites[i] = -1;
-    if (selection_find_elites(&gen, elites, ELITE_COUNT) == 0) {
-        printf("\n=== Elites ===\n");
-        for (i = 0; i < ELITE_COUNT; i++)
-            printf("Elite %d : individu %d, fitness = %.0f\n",
-                   i, elites[i], gen.items[elites[i]].fitness);
-    }
-
-    /* 4. Crossover avec selection par tournoi */
-    children = crossover_generation_new(&gen, NB_HOP);
-    if (children.size == 0) {
-        printf("Erreur crossover\n");
-        generation_free(&gen);
+    if (coverage_build(&table, &coverage) != 0)
+    {
+        printf("Erreur construction index couverture\n");
         municipality_table_free(&table);
         return 1;
     }
 
-    /* 5. Calcul fitness des enfants */
-    compute_fitness_gen(&table, &children);
-    print_gen(&children, "Generation apres crossover");
+    config = ga_config_default();
+    printf("Config GA: pop=%d, hop=%d, max_gen=%d, elite=%d, tournoi=%d, mutation=%.2f->%.2f, immigrants=%.2f<=%.2f, restart=%d, max_restart=%d, cible=%.0f\n",
+           config.population_size,
+           config.nb_hop,
+           config.max_generations,
+           config.elite_count,
+           config.tournament_k,
+           config.mutation_rate_start,
+           config.mutation_rate_end,
+           config.immigrants_rate,
+           config.immigrants_rate_max,
+           config.restart_threshold,
+           config.max_restarts,
+           config.target_fitness);
 
-    /* 6. Injection des elites */
-    inject_elites(&children, &gen, elites);
-    printf("\n=== Apres injection des elites ===\n");
-    printf("Meilleure = %.0f | Moyenne = %.0f\n",
-           get_best(&children), get_avg(&children));
-
-    /* 7. Comparaison finale */
-    printf("\n=== Comparaison ===\n");
-    printf("Generation initiale : meilleure = %.0f | moyenne = %.0f\n",
-           get_best(&gen), get_avg(&gen));
-    printf("Apres crossover     : meilleure = %.0f | moyenne = %.0f\n",
-           get_best(&children), get_avg(&children));
-
-    /* 8. Export de la meilleure solution et generation du PDF */
+    if (ga_init_generation(&gen, &config, &table) != 0)
     {
-        int bi = get_best_index(&children);
-        int ret;
-        export_solution(&table, &children.items[bi], SOLUTION_CSV);
-        ret = system("python3 scripts/generate_pdf.py");
-        if (ret != 0)
-            fprintf(stderr, "Erreur lors de la generation du PDF (code %d)\n", ret);
+        printf("Erreur generation initiale\n");
+        coverage_free(&coverage);
+        municipality_table_free(&table);
+        return 1;
     }
 
-    /* Liberation memoire */
+    ga_evaluate_generation(&table, &coverage, &gen);
+
+    total_population = compute_total_population(&table);
+
+    init_window(WINDOW_WIDTH, WINDOW_HEIGHT);
+    bg = MLV_create_image(WINDOW_WIDTH, WINDOW_HEIGHT);
+    draw_map_of_towns(table.items, (int)table.count, bg);
+
+    best_overall = ga_get_best_fitness(&gen);
+    if (config.verbose)
+        print_generation_summary(0, &table, &coverage, &gen, config.mutation_rate);
+    display_generation(bg, &table, &gen, 0, ga_get_avg_fitness(&gen), total_population);
+
+    last_display = MLV_get_time();
+
+    stagnation = 0;
+    restart_count = 0;
+    immigrants_base = config.immigrants_rate;
+
+    if (best_overall >= config.target_fitness)
+    {
+        printf("Objectif deja atteint: %.0f\n", best_overall);
+    }
+    else
+    {
+        for (generation = 1; generation <= config.max_generations; generation++)
+        {
+            double progress;
+            double base_rate;
+            double boost = 0.0;
+            double immigrants_rate;
+
+            if (config.max_generations > 1)
+                progress = (double)(generation - 1) / (double)(config.max_generations - 1);
+            else
+                progress = 1.0;
+
+            base_rate = config.mutation_rate_start + (config.mutation_rate_end - config.mutation_rate_start) * progress;
+
+            if (stagnation >= 10)
+                boost = 0.02;
+            if (stagnation >= 30)
+                boost = 0.05;
+
+            config.mutation_rate = base_rate + boost;
+            if (config.mutation_rate < config.mutation_rate_end)
+                config.mutation_rate = config.mutation_rate_end;
+            if (config.mutation_rate > 0.35)
+                config.mutation_rate = 0.35;
+
+            immigrants_rate = immigrants_base;
+            if (stagnation >= 10)
+                immigrants_rate += 0.05;
+            if (stagnation >= 30)
+                immigrants_rate += 0.15;
+            if (stagnation >= 60)
+                immigrants_rate += 0.25;
+            if (immigrants_rate > config.immigrants_rate_max)
+                immigrants_rate = config.immigrants_rate_max;
+            config.immigrants_rate = immigrants_rate;
+
+            next = ga_next_generation(&gen, &config, &table, &coverage);
+            if (next.size == 0)
+            {
+                printf("Erreur generation suivante\n");
+                break;
+            }
+
+            ga_evaluate_generation(&table, &coverage, &next);
+
+            current_best = ga_get_best_fitness(&next);
+            if (current_best > best_overall)
+            {
+                best_overall = current_best;
+                stagnation = 0;
+            }
+            else
+            {
+                stagnation++;
+            }
+
+            if (config.verbose)
+                print_generation_summary(generation, &table, &coverage, &next, config.mutation_rate);
+            {
+                unsigned long now = MLV_get_time();
+                if (now - last_display >= DISPLAY_INTERVAL_MS)
+                {
+                    display_generation(bg, &table, &next, generation, ga_get_avg_fitness(&next), total_population);
+                    last_display = now;
+                }
+            }
+
+            generation_free(&gen);
+            gen = next;
+
+            if (current_best >= config.target_fitness)
+            {
+                printf("Objectif atteint: %.0f\n", current_best);
+                break;
+            }
+
+            if (config.restart_threshold > 0 && stagnation >= config.restart_threshold)
+            {
+                restart_count++;
+                printf("Restart %d/%d a la generation %d (stagnation=%d)\n",
+                       restart_count, config.max_restarts, generation, stagnation);
+
+                if (config.max_restarts > 0 && restart_count > config.max_restarts)
+                {
+                    printf("Arret: nombre maximum de restarts atteint\n");
+                    break;
+                }
+
+                if (ga_reseed_generation(&gen, &config, &table, config.elite_count) != 0)
+                {
+                    printf("Erreur reseed\n");
+                    break;
+                }
+
+                ga_evaluate_generation(&table, &coverage, &gen);
+                current_best = ga_get_best_fitness(&gen);
+                if (current_best > best_overall)
+                    best_overall = current_best;
+                stagnation = 0;
+
+                if (config.verbose)
+                    print_generation_summary(generation, &table, &coverage, &gen, config.mutation_rate);
+                display_generation(bg, &table, &gen, generation, ga_get_avg_fitness(&gen), total_population);
+                last_display = MLV_get_time();
+
+                continue;
+            }
+
+            if (config.stagnation_limit > 0 && stagnation >= config.stagnation_limit)
+            {
+                printf("Arret pour stagnation (%d generations)\n",
+                       config.stagnation_limit);
+                break;
+            }
+        }
+    }
+
+    printf("Meilleur fitness final: %.0f\n", best_overall);
+    gen.best_index =0;
+    if (gen.best_index >= 0)
+    {
+        if (csv_export_best_solution("./assets/best_solution.csv", &table,
+                                     &gen.items[gen.best_index]) == 0)
+        {
+            int ret;
+            printf("Export CSV : assets/best_solution.csv\n");
+            /* Generation du rapport PDF a partir de la solution exportee */
+            ret = system("python3 scripts/generate_pdf.py");
+            if (ret != 0)
+                fprintf(stderr, "Erreur lors de la generation du PDF (code %d)\n", ret);
+        }
+        else
+            printf("Erreur export CSV\n");
+    }
+    display_generation(bg, &table, &gen, generation, ga_get_avg_fitness(&gen), total_population);
+
+    MLV_wait_mouse(NULL, NULL);
+    MLV_free_image(bg);
+    close_window();
+
     generation_free(&gen);
-    generation_free(&children);
+    coverage_free(&coverage);
     municipality_table_free(&table);
 
     return 0;

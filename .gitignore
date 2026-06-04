@@ -1,3 +1,6 @@
+# Compiled binaries
+*.o
+build/*
 # IDEs
 .vscode/
 .idea/
@@ -5,13 +8,12 @@
 *.swo
 *~
 .DS_Store
-
 app
-# Compiled binaries
-*.o
-build/*
 
 # Python
 __pycache__/
 *.pyc
 .venv/
+
+# Sorties générées à l'exécution
+assets/best_solution.csv
