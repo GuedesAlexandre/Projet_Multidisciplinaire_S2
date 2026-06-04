@@ -1,10 +1,26 @@
 import io
+import os
 
+import matplotlib
 import pandas as pd
 from fpdf import FPDF
 from datetime import date
 
 from map_render import render_national_map, render_department_map
+
+# Police Unicode (DejaVu Sans) : la police cœur Helvetica est limitée au
+# latin-1 et plante sur des caractères comme « œ » (ex. Nœux-les-Mines) ou « — ».
+# On réutilise les .ttf fournis par matplotlib (déjà installé) : aucune
+# dépendance à une police système ni fichier à committer.
+FONT     = "DejaVu"
+_TTF_DIR = os.path.join(matplotlib.get_data_path(), "fonts", "ttf")
+
+
+def _register_fonts(pdf):
+    pdf.add_font(FONT, "",   os.path.join(_TTF_DIR, "DejaVuSans.ttf"))
+    pdf.add_font(FONT, "B",  os.path.join(_TTF_DIR, "DejaVuSans-Bold.ttf"))
+    pdf.add_font(FONT, "I",  os.path.join(_TTF_DIR, "DejaVuSans-Oblique.ttf"))
+    pdf.add_font(FONT, "BI", os.path.join(_TTF_DIR, "DejaVuSans-BoldOblique.ttf"))
 
 COMMUNES_CSV = "assets/communes-france-metrople-2025.csv"
 SOLUTION_CSV = "assets/best_solution.csv"   # produit par l'algo génétique (csv_export.c)
@@ -138,7 +154,7 @@ class RapportPDF(FPDF):
     def header(self):
         if self.page_no() == 1:
             return
-        self.set_font("Helvetica", "I", 8)
+        self.set_font(FONT, "I", 8)
         self.set_text_color(150, 150, 150)
         self.cell(0, 6, "Rapport - Meilleure solution de couverture médicale", align="R")
         self.ln(2)
@@ -150,7 +166,7 @@ class RapportPDF(FPDF):
         if self.page_no() == 1:
             return
         self.set_y(-12)
-        self.set_font("Helvetica", "I", 8)
+        self.set_font(FONT, "I", 8)
         self.set_text_color(150, 150, 150)
         self.cell(0, 6, f"Page {self.page_no()}", align="C")
 
@@ -159,18 +175,18 @@ class RapportPDF(FPDF):
     def page_titre(self):
         self.add_page()
         self.ln(60)
-        self.set_font("Helvetica", "B", 26)
+        self.set_font(FONT, "B", 26)
         self.set_text_color(30, 60, 120)
         self.cell(0, 14, "Rapport de couverture médicale", align="C")
         self.ln(16)
-        self.set_font("Helvetica", "B", 16)
+        self.set_font(FONT, "B", 16)
         self.set_text_color(70, 70, 70)
         self.cell(0, 10, "Meilleure solution de la génération", align="C")
         self.ln(24)
         self.set_draw_color(30, 60, 120)
         self.line(40, self.get_y(), 170, self.get_y())
         self.ln(12)
-        self.set_font("Helvetica", "", 11)
+        self.set_font(FONT, "", 11)
         self.set_text_color(110, 110, 110)
         self.cell(0, 7, f"Généré le {date.today().strftime('%d/%m/%Y')}", align="C")
         self.ln(7)
@@ -207,7 +223,7 @@ class RapportPDF(FPDF):
             self.set_fill_color(240, 242, 248)
             self.set_draw_color(180, 190, 210)
             self.rect(10, y_carte, 190, 95, style="FD")
-            self.set_font("Helvetica", "I", 11)
+            self.set_font(FONT, "I", 11)
             self.set_text_color(160, 160, 180)
             self.set_xy(10, y_carte + 42)
             self.cell(190, 10, "[ Carte de couverture indisponible ]", align="C")
@@ -300,7 +316,7 @@ class RapportPDF(FPDF):
 
         # --- Commune en désert la plus peuplée ---
         self._titre_sous_section("Commune en désert la plus peuplée")
-        self.set_font("Helvetica", "", 10)
+        self.set_font(FONT, "", 10)
         if dept["commune_desert_max"]:
             c = dept["commune_desert_max"]
             self.set_text_color(180, 60, 0)
@@ -314,7 +330,7 @@ class RapportPDF(FPDF):
 
         # --- Hôpital le plus sollicité ---
         self._titre_sous_section("Hôpital le plus sollicité")
-        self.set_font("Helvetica", "", 10)
+        self.set_font(FONT, "", 10)
         if dept["hopital_max_charge"]:
             h = dept["hopital_max_charge"]
             self.set_text_color(30, 30, 30)
@@ -329,7 +345,7 @@ class RapportPDF(FPDF):
 
         # --- Taux de lits vs norme nationale ---
         self._titre_sous_section(f"Taux de lits vs norme nationale ({LITS_PER_1000} / 1 000 hab.)")
-        self.set_font("Helvetica", "", 10)
+        self.set_font(FONT, "", 10)
         if dept["pop_totale"] > 0 and dept["total_lits"] > 0:
             ecart = dept["taux_lits"] - LITS_PER_1000
             if ecart >= 0:
@@ -354,7 +370,7 @@ class RapportPDF(FPDF):
             for _, row in hopitaux_df.iterrows()
             if row.get("est_chru", 0) == 0 and row["population"] > SEUIL_CHRU
         ]
-        self.set_font("Helvetica", "", 10)
+        self.set_font(FONT, "", 10)
         if not manquants:
             self.set_text_color(0, 130, 0)
             self.multi_cell(0, 6, "Couverture CHRU satisfaisante pour ce département.")
@@ -384,7 +400,7 @@ class RapportPDF(FPDF):
         self.set_y(y + h)
 
     def _titre_section(self, texte):
-        self.set_font("Helvetica", "B", 13)
+        self.set_font(FONT, "B", 13)
         self.set_text_color(30, 60, 120)
         self.cell(0, 8, texte)
         self.ln(9)
@@ -394,16 +410,16 @@ class RapportPDF(FPDF):
         self.set_text_color(30, 30, 30)
 
     def _titre_sous_section(self, texte):
-        self.set_font("Helvetica", "B", 11)
+        self.set_font(FONT, "B", 11)
         self.set_text_color(60, 60, 60)
         self.cell(0, 7, texte)
         self.ln(9)
 
     def _ligne_stat(self, label, valeur):
-        self.set_font("Helvetica", "", 10)
+        self.set_font(FONT, "", 10)
         self.set_text_color(90, 90, 90)
         self.cell(85, 7, label + " :")
-        self.set_font("Helvetica", "B", 10)
+        self.set_font(FONT, "B", 10)
         self.set_text_color(20, 20, 20)
         self.cell(0, 7, valeur)
         self.ln(7)
@@ -411,7 +427,7 @@ class RapportPDF(FPDF):
     def _entete_tableau(self, cols):
         self.set_fill_color(30, 60, 120)
         self.set_text_color(255, 255, 255)
-        self.set_font("Helvetica", "B", 9)
+        self.set_font(FONT, "B", 9)
         for label, width in cols:
             self.cell(width, 7, label, border=1, fill=True)
         self.ln()
@@ -419,7 +435,7 @@ class RapportPDF(FPDF):
     def _ligne_tableau(self, cols, values, idx):
         self.set_fill_color(235, 240, 250) if idx % 2 == 0 else self.set_fill_color(255, 255, 255)
         self.set_text_color(30, 30, 30)
-        self.set_font("Helvetica", "", 9)
+        self.set_font(FONT, "", 9)
         for (_, width), val in zip(cols, values):
             self.cell(width, 6, val, border=1, fill=True)
         self.ln()
@@ -427,6 +443,7 @@ class RapportPDF(FPDF):
 
 def generate_pdf(stats, global_stats, df):
     pdf = RapportPDF(orientation="P", unit="mm", format="A4")
+    _register_fonts(pdf)
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_margins(10, 15, 10)
 
