@@ -237,9 +237,16 @@ int main(void)
     gen.best_index =0;
     if (gen.best_index >= 0)
     {
-        if (csv_export_best_solution("./best_solution.csv", &table,
+        if (csv_export_best_solution("./assets/best_solution.csv", &table,
                                      &gen.items[gen.best_index]) == 0)
-            printf("Export CSV : best_solution.csv\n");
+        {
+            int ret;
+            printf("Export CSV : assets/best_solution.csv\n");
+            /* Generation du rapport PDF a partir de la solution exportee */
+            ret = system("python3 scripts/generate_pdf.py");
+            if (ret != 0)
+                fprintf(stderr, "Erreur lors de la generation du PDF (code %d)\n", ret);
+        }
         else
             printf("Erreur export CSV\n");
     }

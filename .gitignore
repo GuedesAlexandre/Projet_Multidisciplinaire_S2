@@ -9,3 +9,11 @@ build/*
 *~
 .DS_Store
 app
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Sorties générées à l'exécution
+assets/best_solution.csv
