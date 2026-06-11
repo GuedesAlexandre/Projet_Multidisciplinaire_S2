@@ -25,7 +25,7 @@ GAConfig ga_config_default(void)
     cfg.guided_mutation_rate = 0.40;
     cfg.restart_threshold = 30;
     cfg.max_restarts = 5;
-    cfg.target_fitness = 55000000.0;
+    cfg.target_fitness = 52000000.0;
     cfg.stagnation_limit = 120;
     cfg.verbose = 1;
     return cfg;
