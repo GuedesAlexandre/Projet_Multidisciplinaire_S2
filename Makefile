@@ -32,6 +32,9 @@ $(TARGET): $(OBJ)
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
+install-deps:
+    pip install -r ./scripts/requirements.txt --break-system-packages
+
 clean:
 	rm -f $(OBJ) $(TARGET)
 
